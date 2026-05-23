@@ -1,4 +1,5 @@
 import json
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -6,106 +7,128 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from app.schemas.run import StartRunRequest
+from app.services.flight_recorder import (
+    build_error_run,
+    build_success_or_failure_run,
+)
+from app.services.git_service import (
+    CleanupResult,
+    cleanup_gitclaw_scaffold,
+    get_git_snapshot,
+)
+from app.services.gitclaw_service import (
+    build_fallback_prompt,
+    is_read_only_task,
+    run_gitclaw,
+)
+from app.services.test_runner import run_pytest
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
-DATA_DIR = Path("data/runs")
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+DATA_DIR = BACKEND_DIR / "data" / "runs"
 
 
 @router.post("/start")
 def start_run(payload: StartRunRequest):
     run_id = str(uuid.uuid4())[:8]
-    now = datetime.now(timezone.utc).isoformat()
+    started_at = datetime.now(timezone.utc).isoformat()
+    repo_path = Path(payload.repo_path).expanduser()
 
-    run_data = {
-        "run_id": run_id,
-        "status": "completed",
-        "repo_path": payload.repo_path,
-        "task": payload.task,
-        "started_at": now,
-        "completed_at": now,
-        "agents": [
-            {
-                "name": "Analyzer Agent",
-                "status": "completed",
-                "summary": "Scanned the repository and identified the FastAPI app structure.",
-                "details": "Found main.py, auth.py, and tests/."
-            },
-            {
-                "name": "Planner Agent",
-                "status": "completed",
-                "summary": "Created a step-by-step implementation plan.",
-                "details": "Planned middleware changes, test coverage, and validation."
-            },
-            {
-                "name": "Coder Agent",
-                "status": "completed",
-                "summary": "Modified application code and added tests.",
-                "details": "Changed main.py and created tests/test_request_logging.py."
-            },
-            {
-                "name": "Tester Agent",
-                "status": "completed",
-                "summary": "Ran the test suite and verified the implementation.",
-                "details": "pytest completed successfully."
-            },
-            {
-                "name": "Reviewer Agent",
-                "status": "completed",
-                "summary": "Reviewed the code for safety and maintainability.",
-                "details": "Risk level is low. Human review recommended before merge."
-            }
-        ],
-        "changed_files": [
-            {
-                "path": "main.py",
-                "change_type": "modified",
-                "summary": "Added request logging middleware."
-            },
-            {
-                "path": "tests/test_request_logging.py",
-                "change_type": "created",
-                "summary": "Added tests for request logging behavior."
-            }
-        ],
-        "tests": {
-            "command": "pytest",
-            "status": "passed",
-            "summary": "8 passed in 1.42s"
-        },
-        "safety": {
-            "risk_score": "low",
-            "blocked_actions": [
-                {
-                    "command": "cat .env",
-                    "reason": "Blocked access to sensitive environment file."
-                }
-            ]
-        },
-        "memory": {
-            "before": ["No repo-specific memory found."],
-            "learned": [
-                "This repo uses pytest for backend tests.",
-                "Application entrypoint is main.py.",
-                "Always run pytest before finalizing changes."
-            ],
-            "used": []
-        },
-        "pr_summary": {
-            "title": "Add request logging middleware",
-            "body": [
-                "Added FastAPI request logging middleware.",
-                "Added tests for request logging behavior.",
-                "Verified changes with pytest."
-            ]
-        }
-    }
+    if not repo_path.exists() or not repo_path.is_dir():
+        return _save_run(
+            build_error_run(
+                run_id=run_id,
+                repo_path=payload.repo_path,
+                task=payload.task,
+                started_at=started_at,
+                message=f"Repo path does not exist or is not a directory: {payload.repo_path}",
+            )
+        )
 
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    file_path = DATA_DIR / f"{run_id}.json"
-    file_path.write_text(json.dumps(run_data, indent=2), encoding="utf-8")
+    if not os.environ.get("OPENAI_API_KEY"):
+        return _save_run(
+            build_error_run(
+                run_id=run_id,
+                repo_path=str(repo_path),
+                task=payload.task,
+                started_at=started_at,
+                message="OPENAI_API_KEY is not set. Set it in the backend process environment and restart uvicorn.",
+            )
+        )
 
-    return run_data
+    try:
+        git_before = get_git_snapshot(repo_path)
+        if git_before.status.return_code != 0:
+            return _save_run(
+                build_error_run(
+                    run_id=run_id,
+                    repo_path=str(repo_path),
+                    task=payload.task,
+                    started_at=started_at,
+                    message=(
+                        "Repo path exists, but git status failed: "
+                        f"{git_before.status.stderr.strip()}"
+                    ),
+                )
+        )
+
+        gitclaw_result = run_gitclaw(repo_path, payload.task)
+        cleanup_result = cleanup_gitclaw_scaffold(
+            repo_path,
+            status_before=git_before.status.stdout,
+            created_scaffold_paths=gitclaw_result.created_scaffold_paths,
+        )
+        gitclaw_result.stdout = _append_cleanup_summary(
+            gitclaw_result.stdout, cleanup_result
+        )
+        git_after_gitclaw = get_git_snapshot(repo_path)
+        first_changed_count = len(git_after_gitclaw.changed_files)
+        fallback_gitclaw_result = None
+
+        if first_changed_count == 0 and not is_read_only_task(payload.task):
+            fallback_gitclaw_result = run_gitclaw(
+                repo_path,
+                payload.task,
+                prompt_override=build_fallback_prompt(payload.task),
+                attempt="fallback",
+            )
+            fallback_cleanup_result = cleanup_gitclaw_scaffold(
+                repo_path,
+                status_before=git_before.status.stdout,
+                created_scaffold_paths=fallback_gitclaw_result.created_scaffold_paths,
+            )
+            fallback_gitclaw_result.stdout = _append_cleanup_summary(
+                fallback_gitclaw_result.stdout, fallback_cleanup_result
+            )
+            git_after_gitclaw = get_git_snapshot(repo_path)
+
+        test_result = run_pytest(repo_path)
+        git_after = get_git_snapshot(repo_path)
+
+        run_data = build_success_or_failure_run(
+            run_id=run_id,
+            repo_path=repo_path,
+            task=payload.task,
+            started_at=started_at,
+            git_before=git_before,
+            gitclaw_result=gitclaw_result,
+            fallback_gitclaw_result=fallback_gitclaw_result,
+            first_changed_count=first_changed_count,
+            test_result=test_result,
+            git_after_gitclaw=git_after_gitclaw,
+            git_after=git_after,
+        )
+    except Exception as error:
+        run_data = build_error_run(
+            run_id=run_id,
+            repo_path=str(repo_path),
+            task=payload.task,
+            started_at=started_at,
+            message=f"Unexpected backend error while running BroPilot: {error}",
+        )
+
+    return _save_run(run_data)
 
 
 @router.get("/{run_id}")
@@ -116,3 +139,28 @@ def get_run(run_id: str):
         raise HTTPException(status_code=404, detail="Run not found")
 
     return json.loads(file_path.read_text(encoding="utf-8"))
+
+
+def _save_run(run_data: dict):
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    file_path = DATA_DIR / f"{run_data['run_id']}.json"
+    file_path.write_text(json.dumps(run_data, indent=2), encoding="utf-8")
+
+    return run_data
+
+
+def _append_cleanup_summary(output: str, cleanup: CleanupResult) -> str:
+    parts = [output.strip()] if output.strip() else []
+    parts.append(f"BroPilot scaffold cleanup: {cleanup.summary}")
+
+    for label, result in [
+        ("unstage", cleanup.unstaged),
+        ("restore", cleanup.restored),
+        ("clean", cleanup.cleaned),
+    ]:
+        if result and result.return_code != 0:
+            parts.append(
+                f"Cleanup {label} exited with {result.return_code}: {result.stderr.strip()}"
+            )
+
+    return "\n\n".join(parts)
