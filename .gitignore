@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+dist/
+
+# Logs / data
+*.log
+backend/data/runs/
+.flight-recorder/
+
+# OS
+.DS_Store
+Thumbs.db
