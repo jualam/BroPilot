@@ -219,22 +219,17 @@ If a task says to update only specific files, BroPilot compares that boundary ag
 
 ## Why BroPilot Disables the Gitclaw CLI Tool
 
-During testing, Gitclaw's shell-oriented CLI tool was unreliable on Windows. The agent repeatedly attempted commands such as:
+During local Windows testing, the direct Gitclaw CLI path was not reliable enough for BroPilot's workflow. The agent could fall back to shell-style discovery commands, which made runs harder to control and sometimes produced no useful code changes.
 
-- `grep`
-- `find`
-- `Get-Content`
-- `Select-String`
+BroPilot switched to the Gitclaw SDK so the backend can disable the `cli` tool, preload repo context, capture structured output, and keep verification under BroPilot's control.
 
-Those commands failed in the local workflow and could lead to zero code changes.
-
-BroPilot solves this by using the Gitclaw SDK runner with:
+The runner disables shell execution with:
 
 ```js
 disallowedTools: ["cli"]
 ```
 
-That forces read/write-style agent behavior. BroPilot handles verification itself by running `python -m pytest` and capturing git status/diff independently.
+That keeps the agent focused on read/write-style file edits while BroPilot handles verification itself by running `python -m pytest` and capturing git status/diff independently.
 
 ## Repo Memory
 
@@ -251,7 +246,7 @@ The run records are audit history and are not used as a replacement for human re
 
 ## Known Limitations
 
-BroPilot is a local-first prototype built for the GitAgent/Gitclaw hiring challenge.
+BroPilot is a local-first prototype.
 
 - No GitHub draft PR creation yet.
 - No automatic branch/session management yet.
@@ -269,9 +264,3 @@ BroPilot is a local-first prototype built for the GitAgent/Gitclaw hiring challe
 - Support for more repo types and test commands.
 - Cloud deployment for shared demos.
 - Run history browser in the dashboard.
-
-## Challenge Context
-
-BroPilot was built for a GitAgent/Gitclaw builder challenge focused on execution, product thinking, and agent workflow design.
-
-The core idea is simple: make AI-generated code changes safer by turning the agent run into a visible, reviewable flight recorder.
