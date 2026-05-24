@@ -1,10 +1,10 @@
 # BroPilot
 
-Your repo's AI teammate for safe, reviewable code changes.
+Safe PR builder for agentic code changes.
 
-BroPilot is a local-first multi-agent PR builder. Give it a repository path and an engineering task, and it runs a controlled Gitclaw-powered workflow that aims to produce a small, test-backed code change with a clear review trail.
+BroPilot is a local-first multi-agent PR builder powered by Gitclaw. Give it a repository path and an engineering task, and it runs a constrained agent workflow that produces a reviewable code change, runs tests independently, captures the diff, records repo memory, and packages the result for human review.
 
-It does not auto-merge, auto-push, or bypass human review. BroPilot prepares reviewable changes and shows exactly what happened.
+BroPilot does not auto-merge, auto-push, or bypass human review.
 
 ## What BroPilot Does
 
@@ -12,35 +12,47 @@ BroPilot turns this:
 
 ```text
 Repo path: D:\bropilot-demo
-Task: Fix profile lookup to return 404 for unknown users and add tests
+Task: Add a /status endpoint that returns {"status": "ready"} and add tests
 ```
 
-Into a local agent run with:
+Into a local review workflow:
 
-- Gitclaw agent execution through the SDK
-- captured agent timeline
-- changed file detection
-- backend-run `python -m pytest`
-- safety cleanup for generated scaffold files
-- a PR-style summary for human review
+- Analyzer records the starting git state.
+- Planner builds a constrained Gitclaw prompt with repo memory and preloaded file context.
+- Coder runs Gitclaw through the SDK with shell commands disabled.
+- Tester runs `python -m pytest` from the backend.
+- Reviewer captures changed files, diff stats, safety signals, and a copy-ready PR summary.
 
-The frontend presents the run as an Agent Flight Recorder so you can inspect the analyzer, planner, coder, tester, and reviewer stages instead of trusting a black box.
+The dashboard presents the run as an Agent Flight Recorder instead of a black-box agent response.
 
 ## Why This Is Useful
 
-AI coding tools often hide too much. They edit files, run commands, and summarize results without making the decision trail easy to inspect.
+AI coding agents can edit files quickly, but they often hide too much of the workflow. BroPilot makes the change reviewable by showing:
 
-BroPilot is built around a different idea: agentic code changes should be observable, constrained, and reviewable. The useful artifact is not just the patch. It is the patch plus the run history, safety posture, test result, changed files, and PR-ready explanation.
+- what the agent was asked to do
+- which files were preloaded and changed
+- whether tests passed
+- whether the agent touched unexpected files
+- what repo memory was used and learned
+- what a reviewer can copy into a PR
+
+The goal is not automatic merging. The goal is safer, observable, review-ready code generation.
 
 ## Key Features
 
-- **Gitclaw SDK runner**: the backend invokes Gitclaw through a small Node.js SDK runner instead of relying on the CLI path.
-- **CLI tool disabled**: BroPilot runs Gitclaw with `disallowedTools: ["cli"]` for safer Windows-compatible local runs.
-- **Agent Flight Recorder**: the Next.js dashboard shows each agent stage, status, summary, and details.
-- **Independent pytest verification**: the FastAPI backend runs `python -m pytest` itself after the agent finishes.
-- **Changed files and git diff capture**: BroPilot records git status, changed files, and diff summaries for review.
-- **Protected path cleanup**: generated Gitclaw scaffold/runtime files are cleaned after each run while preserving existing user files.
-- **Curated Gitclaw-native agent config**: `agents/bropilot-agent/` documents BroPilot's intended agent identity, rules, duties, memory, skills, and safety hooks.
+- **Gitclaw SDK runner**: BroPilot invokes Gitclaw through `backend/scripts/gitclaw_runner.mjs`.
+- **CLI tool disabled**: Gitclaw runs with `disallowedTools: ["cli"]` for safer Windows-compatible local runs.
+- **Preloaded repo context**: known repo files are loaded into the prompt so Gitclaw does not need shell discovery.
+- **Agent Flight Recorder**: the Next.js dashboard shows Analyzer, Planner, Coder, Tester, and Reviewer stages.
+- **Independent pytest verification**: the FastAPI backend runs `python -m pytest` after Gitclaw finishes.
+- **Test repair attempt**: when pytest fails, BroPilot can run a focused Gitclaw repair attempt using the failure output.
+- **Changed files and diff viewer**: file cards show additions/deletions and open a side-by-side before/after diff.
+- **Review Assistant**: on-demand AI summary for a single opened file diff.
+- **Safety warnings**: BroPilot flags protected paths and unexpected file changes outside the task boundary.
+- **Repo memory**: bounded repo-specific lessons are stored locally and loaded into future Gitclaw prompts.
+- **Copy-ready PR summary**: generated markdown summarizes the patch, verification, and review requirements.
+- **Demo reset script**: `scripts/reset-demo.ps1` resets the demo repo to a known baseline.
+- **Curated Gitclaw-native agent spec**: `agents/bropilot-agent/` documents BroPilot's intended identity, rules, duties, memory, skills, and hooks.
 
 ## Architecture
 
@@ -54,7 +66,8 @@ Next.js Dashboard (frontend/)
   v
 FastAPI Orchestrator (backend/)
   |
-  | preload known repo files
+  | load repo memory
+  | preload known files
   | create temporary Gitclaw scaffold in target repo
   v
 Node Gitclaw SDK Runner (backend/scripts/gitclaw_runner.mjs)
@@ -66,12 +79,21 @@ Target Repo (example: D:\bropilot-demo)
   | cleanup scaffold/runtime files
   | run python -m pytest
   | capture git status/diff
+  | update repo memory
   v
 Agent Flight Recorder Response
   |
   v
 Next.js Dashboard
 ```
+
+Review Assistant uses a separate backend endpoint:
+
+```text
+Diff modal -> POST /api/review/file-diff -> OpenAI Responses API
+```
+
+It summarizes only the currently opened file diff and does not invoke Gitclaw.
 
 ## Project Structure
 
@@ -80,27 +102,30 @@ BroPilot/
 |-- frontend/                         # Next.js dashboard
 |-- backend/                          # FastAPI orchestrator
 |   |-- app/
-|   |   |-- routes/                   # API routes
-|   |   |-- schemas/                  # Request schemas
-|   |   `-- services/                 # Gitclaw, git, pytest, recorder services
+|   |   |-- routes/                   # Run and review APIs
+|   |   |-- schemas/                  # Request/response schemas
+|   |   `-- services/                 # Gitclaw, git, pytest, memory, recorder services
 |   |-- scripts/
 |   |   `-- gitclaw_runner.mjs        # Node Gitclaw SDK runner
-|   `-- data/runs/                    # Local run JSON artifacts
-`-- agents/
-    |-- README.md
-    `-- bropilot-agent/               # Curated Gitclaw-native agent spec
-        |-- agent.yaml
-        |-- SOUL.md
-        |-- RULES.md
-        |-- DUTIES.md
-        |-- memory/MEMORY.md
-        |-- skills/
-        `-- hooks/hooks.yaml
+|   `-- data/                         # Ignored local run and memory artifacts
+|-- agents/
+|   |-- README.md
+|   `-- bropilot-agent/               # Curated Gitclaw-native agent spec
+|       |-- agent.yaml
+|       |-- SOUL.md
+|       |-- RULES.md
+|       |-- DUTIES.md
+|       |-- memory/MEMORY.md
+|       |-- skills/
+|       `-- hooks/hooks.yaml
+|-- scripts/
+|   `-- reset-demo.ps1                # Reset local demo repo
+`-- DEMO.md                           # Reproducible demo guide
 ```
 
 ## Local Setup
 
-### 1. Backend Python setup
+### Backend Python Setup
 
 ```powershell
 cd backend
@@ -109,19 +134,20 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-Set your OpenAI key in the backend process environment:
+Set the OpenAI key in the backend process environment:
 
 ```powershell
 $env:OPENAI_API_KEY="sk-..."
 ```
 
-Optional model override:
+Optional model overrides:
 
 ```powershell
 $env:BROPILOT_GITCLAW_MODEL="openai:gpt-4o"
+$env:BROPILOT_REVIEW_MODEL="gpt-4o-mini"
 ```
 
-### 2. Backend Node dependency
+### Backend Node Dependency
 
 The Gitclaw SDK runner imports `gitclaw` from the backend Node environment:
 
@@ -130,7 +156,7 @@ cd backend
 npm install gitclaw
 ```
 
-### 3. Run the backend
+### Run The Backend
 
 ```powershell
 cd backend
@@ -143,7 +169,7 @@ The API runs at:
 http://127.0.0.1:8000
 ```
 
-### 4. Frontend setup
+### Run The Frontend
 
 ```powershell
 cd frontend
@@ -159,53 +185,21 @@ http://localhost:3000
 
 ## Demo Flow
 
-1. Start the backend:
+See [DEMO.md](DEMO.md) for the reproducible demo guide.
 
-```powershell
-cd backend
-$env:OPENAI_API_KEY="sk-..."
-uvicorn app.main:app --reload --port 8000
-```
-
-2. Start the frontend:
-
-```powershell
-cd frontend
-npm run dev
-```
-
-3. Open the dashboard:
+The main demo task is:
 
 ```text
-http://localhost:3000
+Add a /status endpoint that returns {"status": "ready"} and add tests. Update only main.py and tests/test_main.py. Do not modify skills/. Make python -m pytest pass.
 ```
 
-4. Enter the local demo repo path:
+Expected successful result:
 
-```text
-D:\bropilot-demo
-```
-
-Demo target repo on GitHub: https://github.com/jualam/broPilot-demo.git
-
-5. Enter the task:
-
-```text
-Fix profile lookup to return 404 for unknown users and add tests
-```
-
-6. Run BroPilot and inspect the Agent Flight Recorder:
-
-- Analyzer Agent
-- Planner Agent
-- Coder Agent
-- Tester Agent
-- Reviewer Agent
-- changed files
-- test result
-- safety notes
-- memory panel
-- PR summary
+- `main.py` and `tests/test_main.py` changed
+- `python -m pytest` passed
+- Safety signal is low unless unexpected files changed
+- Diff viewer and Review Assistant are available
+- Copy-ready PR markdown is generated
 
 ## Safety Design
 
@@ -215,10 +209,13 @@ BroPilot is intentionally conservative.
 - No direct push to `main`.
 - No automatic commit.
 - No `.env`, `.venv`, or `.git` modification.
+- No GitHub API or stored API keys.
 - Backend independently runs verification after the agent run.
 - Human review is required before merge.
 
-The backend also cleans up temporary Gitclaw scaffold/runtime files created during local runs, including `.gitagent/` and `workspace/`, while preserving user-owned agent files if they already existed.
+BroPilot also cleans up temporary Gitclaw scaffold/runtime files created during local runs, including `.gitagent/`, `workspace/`, `agent.yaml`, `SOUL.md`, and `memory/` when they were created by BroPilot.
+
+If a task says to update only specific files, BroPilot compares that boundary against the final changed files. Unexpected edits are surfaced in the Safety Panel and copied into the PR summary notes.
 
 ## Why BroPilot Disables the Gitclaw CLI Tool
 
@@ -229,7 +226,7 @@ During testing, Gitclaw's shell-oriented CLI tool was unreliable on Windows. The
 - `Get-Content`
 - `Select-String`
 
-Those commands failed in the local workflow, and Gitclaw could exit without producing code changes.
+Those commands failed in the local workflow and could lead to zero code changes.
 
 BroPilot solves this by using the Gitclaw SDK runner with:
 
@@ -237,28 +234,41 @@ BroPilot solves this by using the Gitclaw SDK runner with:
 disallowedTools: ["cli"]
 ```
 
-That forces read/write-style agent behavior. BroPilot then runs verification itself through the FastAPI backend with `python -m pytest` and captures git status/diff independently.
+That forces read/write-style agent behavior. BroPilot handles verification itself by running `python -m pytest` and capturing git status/diff independently.
+
+## Repo Memory
+
+BroPilot stores bounded repo-specific memory under `backend/data/memory/` as local ignored data.
+
+The memory file stores:
+
+- up to 12 lessons
+- up to 10 recent run records
+
+Lessons include stable repo facts such as the test command, test location, app entrypoint, changed files, and the latest verification result. Lessons are loaded into future Gitclaw prompts so the agent can adapt to the repo across runs.
+
+The run records are audit history and are not used as a replacement for human review.
 
 ## Known Limitations
 
 BroPilot is a local-first prototype built for the GitAgent/Gitclaw hiring challenge.
 
 - No GitHub draft PR creation yet.
-- No automatic branch management yet.
+- No automatic branch/session management yet.
 - No cloud deployment yet.
-- Memory growth is represented in the UI and curated agent spec, but persistent repo-history memory is not fully implemented yet.
 - Verification currently focuses on Python demo repos using `python -m pytest`.
+- Review Assistant summarizes one opened file diff at a time.
 - Human review is still required before merge.
 
 ## Future Improvements
 
 - GitHub draft PR creation.
 - Safe branch/session management.
-- Persistent repo memory across runs.
+- Persistent repo memory across cloned sessions.
 - Richer policy hooks and audit logs.
 - Support for more repo types and test commands.
 - Cloud deployment for shared demos.
-- More robust agent retry and self-correction loops.
+- Run history browser in the dashboard.
 
 ## Challenge Context
 
