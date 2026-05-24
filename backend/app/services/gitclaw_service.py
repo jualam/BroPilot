@@ -22,7 +22,7 @@ GITCLAW_GUARDRAILS = (
     "repo, profile lookup logic is in main.py and auth.py. Tests are in "
     "tests/test_main.py. If changing tests, write to tests/test_main.py, not "
     "root-level test_main.py. Keep the change small. Do not touch .env, .venv, "
-    ".git, .gitagent, workspace, or git metadata. Do not create root-level "
+    ".git, .gitagent, workspace, skills/, or git metadata. Do not create root-level "
     "test files. Put tests under tests/. BroPilot backend will run python -m "
     "pytest after Gitclaw finishes. If the requested task requires code "
     "changes, modify the relevant files instead of only explaining the issue."
@@ -81,7 +81,10 @@ def build_test_repair_prompt(
                 "Use write tool directly. Do not use cli or shell commands. "
                 "Do not search the filesystem. Fix the current working tree so "
                 "python -m pytest passes. Keep the intended feature behavior. "
-                "Modify only the relevant files. Do not create root-level test files."
+                "The relevant file contents are included below. Pay close attention "
+                "to Python syntax and indentation errors in main.py and "
+                "tests/test_main.py. Modify only the relevant files. Do not create "
+                "root-level test files."
             ),
             f"PYTEST FAILURE OUTPUT:\n{_compact_text(test_output, limit=5000)}",
         ]
@@ -116,12 +119,29 @@ def get_gitclaw_model() -> str:
 
 def is_read_only_task(task: str) -> bool:
     normalized = " ".join(task.lower().split())
+    code_change_markers = (
+        "add ",
+        "fix ",
+        "modify ",
+        "update ",
+        "implement ",
+        "create ",
+        "write ",
+        "make python -m pytest pass",
+        "add tests",
+        "return 404",
+    )
+    if any(marker in normalized for marker in code_change_markers):
+        return False
+
     read_only_markers = (
         "read-only",
         "read only",
-        "do not modify",
-        "don't modify",
         "no code changes",
+        "do not make code changes",
+        "don't make code changes",
+        "do not change any files",
+        "don't change any files",
         "without changing",
         "without modifying",
         "analyze only",
@@ -147,7 +167,11 @@ def run_gitclaw(
     created_scaffold_paths = _ensure_temporary_scaffold(repo_path, model)
     scaffold_summary = _scaffold_summary(created_scaffold_paths)
     prompt = (
-        _fallback_prompt_with_memory(prompt_override, memory_items or [])
+        _override_prompt_with_context(
+            prompt_override,
+            memory_items or [],
+            repo_context.to_prompt_block(),
+        )
         if prompt_override
         else build_gitclaw_prompt(task, repo_context.to_prompt_block(), memory_items or [])
     )
@@ -277,12 +301,16 @@ def _is_profile_lookup_task(task: str) -> bool:
     )
 
 
-def _fallback_prompt_with_memory(prompt: str, memory_items: list[str]) -> str:
+def _override_prompt_with_context(
+    prompt: str, memory_items: list[str], context_block: str
+) -> str:
     return "\n\n".join(
         [
             prompt.strip(),
             "REPO MEMORY FROM PREVIOUS BROPILOT RUNS:",
             memory_prompt_block(memory_items),
+            "PRELOADED REPO CONTEXT:",
+            context_block.strip(),
         ]
     )
 

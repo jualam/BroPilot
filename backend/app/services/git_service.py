@@ -5,6 +5,7 @@ from pathlib import Path
 
 
 GITCLAW_RUNTIME_ROOTS = (".gitagent", "workspace")
+MAX_DIFF_VIEW_CHARS = 20000
 
 
 @dataclass
@@ -46,6 +47,7 @@ def get_git_snapshot(repo_path: Path) -> GitSnapshot:
         if status.return_code == 0
         else []
     )
+    changed_files = enrich_changed_files(repo_path, changed_files)
 
     return GitSnapshot(
         status=status,
@@ -205,6 +207,29 @@ def parse_changed_files(
     return files
 
 
+def enrich_changed_files(
+    repo_path: Path, changed_files: list[dict[str, str]]
+) -> list[dict[str, str]]:
+    enriched = []
+
+    for file in changed_files:
+        before_contents = _read_before_contents(repo_path, file["path"])
+        after_contents = _read_after_contents(repo_path, file["path"])
+        before, before_truncated = _truncate_file_contents(before_contents)
+        after, after_truncated = _truncate_file_contents(after_contents)
+
+        enriched.append(
+            {
+                **file,
+                "before_contents": before,
+                "after_contents": after,
+                "content_truncated": before_truncated or after_truncated,
+            }
+        )
+
+    return enriched
+
+
 def parse_numstat(numstat_output: str) -> dict[str, dict[str, int]]:
     stats: dict[str, dict[str, int]] = {}
 
@@ -234,6 +259,32 @@ def _format_file_stat(path: str, stats: dict[str, int] | None) -> str:
         return f"{path} +0 -0"
 
     return f"{path} +{stats['additions']} -{stats['deletions']}"
+
+
+def _read_before_contents(repo_path: Path, path: str) -> str:
+    result = run_git(repo_path, ["show", f"HEAD:{path.replace('\\', '/')}"])
+    if result.return_code != 0:
+        return ""
+
+    return result.stdout
+
+
+def _read_after_contents(repo_path: Path, path: str) -> str:
+    file_path = repo_path / Path(path)
+    if not file_path.is_file():
+        return ""
+
+    return file_path.read_text(encoding="utf-8", errors="replace")
+
+
+def _truncate_file_contents(value: str) -> tuple[str, bool]:
+    if len(value) <= MAX_DIFF_VIEW_CHARS:
+        return value, False
+
+    return (
+        f"{value[:MAX_DIFF_VIEW_CHARS]}\n[BroPilot truncated this file for display]",
+        True,
+    )
 
 
 def _parse_status_entries(status_output: str) -> list[dict[str, str]]:

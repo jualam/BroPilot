@@ -21,6 +21,9 @@ type ChangedFile = {
   additions?: number;
   deletions?: number;
   diff_stat?: string;
+  before_contents?: string;
+  after_contents?: string;
+  content_truncated?: boolean;
 };
 
 type TestResults = {
@@ -96,6 +99,16 @@ function StatusPill({ value }: { value: string }) {
   );
 }
 
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <span
+      className={`size-2.5 shrink-0 border-b border-r border-[#8fd0ff] transition-transform ${
+        open ? "rotate-[225deg]" : "rotate-45"
+      }`}
+    />
+  );
+}
+
 function Panel({
   title,
   eyebrow,
@@ -109,7 +122,7 @@ function Panel({
 }) {
   return (
     <section
-      className={`min-w-0 rounded-[20px] bg-[#141414] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.28)] ring-1 ring-white/10 ${className}`}
+      className={`min-w-0 rounded-[10px] bg-[#141414] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.28)] ring-1 ring-white/10 ${className}`}
     >
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
@@ -128,7 +141,7 @@ function Panel({
 
 function EmptyPanel({ label }: { label: string }) {
   return (
-    <div className="rounded-[15px] border border-dashed border-white/10 bg-black/20 p-5 text-sm text-zinc-500">
+    <div className="rounded-[8px] border border-dashed border-white/10 bg-black/20 p-5 text-sm text-zinc-500">
       {label}
     </div>
   );
@@ -144,7 +157,7 @@ function WorkflowSteps() {
   ];
 
   return (
-    <section className="rounded-[20px] bg-[#101010] p-4 ring-1 ring-[#0099ff]/20 shadow-[0_0_60px_rgba(0,153,255,0.08)]">
+    <section className="rounded-[10px] bg-[#101010] p-4 ring-1 ring-[#0099ff]/20 shadow-[0_0_60px_rgba(0,153,255,0.08)]">
       <div className="flex flex-wrap items-center justify-center gap-2">
         {steps.map((step, index) => (
           <div className="flex items-center gap-2" key={step}>
@@ -169,6 +182,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [openAgentLogs, setOpenAgentLogs] = useState<Record<string, boolean>>({});
   const [showTestLog, setShowTestLog] = useState(false);
+  const [diffFile, setDiffFile] = useState<ChangedFile | null>(null);
 
   const runMeta = useMemo(() => {
     if (!run) {
@@ -191,6 +205,7 @@ export default function Home() {
     setError(null);
     setOpenAgentLogs({});
     setShowTestLog(false);
+    setDiffFile(null);
 
     try {
       const response = await fetch(API_URL, {
@@ -264,7 +279,7 @@ export default function Home() {
         <WorkflowSteps />
 
         <section className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.06fr)_minmax(380px,0.94fr)]">
-          <div className="min-w-0 rounded-[20px] bg-[#141414] p-6 ring-1 ring-white/10 sm:p-8">
+          <div className="min-w-0 rounded-[10px] bg-[#141414] p-6 ring-1 ring-white/10 sm:p-8">
             <form className="grid gap-4" onSubmit={startRun}>
               <label className="grid gap-2">
                 <span className="text-sm font-medium text-zinc-300">
@@ -292,7 +307,7 @@ export default function Home() {
 
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <button
-                  className="inline-flex min-h-12 items-center justify-center rounded-full bg-white px-5 text-sm font-semibold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:bg-zinc-500 disabled:text-zinc-900"
+                  className="inline-flex min-h-11 items-center justify-center rounded-full bg-white px-4 text-sm font-semibold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:bg-zinc-500 disabled:text-zinc-900"
                   disabled={isLoading}
                   type="submit"
                 >
@@ -333,10 +348,10 @@ export default function Home() {
         </section>
 
         <section className="grid min-w-0 gap-6 lg:grid-cols-2">
-          <ChangedFilesPanel run={run} />
+          <ChangedFilesPanel run={run} onOpenDiff={setDiffFile} />
           <Panel title="Test Results">
             {run && testSummary ? (
-              <div className="rounded-[15px] bg-[#1c1c1c] p-4 ring-1 ring-white/10">
+              <div className="rounded-[8px] bg-[#1c1c1c] p-4 ring-1 ring-white/10">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p className="text-sm font-semibold text-white">
@@ -349,11 +364,12 @@ export default function Home() {
                   <StatusPill value={run.tests.status} />
                 </div>
                 <button
-                  className="mt-4 rounded-full bg-black/30 px-3 py-2 text-xs font-medium text-zinc-300 ring-1 ring-white/10 transition hover:text-white"
+                  className="mt-4 inline-flex items-center gap-2 rounded-[6px] bg-black/30 px-3 py-2 text-xs font-medium text-zinc-300 ring-1 ring-white/10 transition hover:text-white"
                   onClick={() => setShowTestLog((current) => !current)}
                   type="button"
                 >
-                  {showTestLog ? "Hide test log" : "Show test log"}
+                  <span>{showTestLog ? "Hide test log" : "Show test log"}</span>
+                  <ChevronIcon open={showTestLog} />
                 </button>
                 {showTestLog ? (
                   <pre className="mt-3 max-h-56 w-full max-w-full overflow-auto whitespace-pre-wrap break-words rounded-[10px] bg-black/45 p-3 font-mono text-xs leading-5 text-zinc-300 ring-1 ring-white/10">
@@ -371,7 +387,7 @@ export default function Home() {
           <Panel title="Safety Panel">
             {run ? (
               <div className="grid gap-4">
-                <div className="rounded-[15px] bg-[#1c1c1c] p-4 ring-1 ring-white/10">
+                <div className="rounded-[8px] bg-[#1c1c1c] p-4 ring-1 ring-white/10">
                   <p className="text-sm text-zinc-500">Risk score</p>
                   <div className="mt-3">
                     <StatusPill value={run.safety.risk_score} />
@@ -380,7 +396,7 @@ export default function Home() {
                 <div className="grid gap-3">
                   {run.safety.blocked_actions.map((action) => (
                     <article
-                      className="rounded-[15px] bg-orange-400/10 p-4 ring-1 ring-orange-300/15"
+                      className="rounded-[8px] bg-orange-400/10 p-4 ring-1 ring-orange-300/15"
                       key={action.command}
                     >
                       <code className="font-mono text-sm text-orange-100">
@@ -399,7 +415,6 @@ export default function Home() {
           </Panel>
 
           <Panel
-            className="bg-[linear-gradient(135deg,rgba(212,77,240,0.22),rgba(20,20,20,1)_38%,rgba(0,153,255,0.16))]"
             title="Memory Panel"
           >
             {run ? (
@@ -427,6 +442,7 @@ export default function Home() {
         </section>
 
         <PrSummaryPanel run={run} />
+        <DiffViewer file={diffFile} onClose={() => setDiffFile(null)} />
       </div>
     </main>
   );
@@ -440,7 +456,7 @@ function RunSummaryCard({
   runMeta: { label: string; value: string }[] | null;
 }) {
   return (
-    <div className="min-w-0 rounded-[20px] bg-[#141414] p-6 ring-1 ring-white/10 sm:p-8">
+    <div className="min-w-0 rounded-[10px] bg-[#141414] p-6 ring-1 ring-white/10 sm:p-8">
       <div className="flex h-full flex-col justify-between">
         <div>
           <p className="mb-4 text-sm font-medium text-zinc-300">Current run</p>
@@ -455,11 +471,11 @@ function RunSummaryCard({
                   Human review required
                 </span>
               </div>
-              <div className="rounded-[12px] bg-white/10 p-4 ring-1 ring-white/10">
+              <div className="rounded-[8px] bg-white/10 p-4 ring-1 ring-white/10">
                 <p className="text-xs font-medium uppercase text-zinc-500">
                   Task
                 </p>
-                <p className="mt-3 text-lg font-semibold leading-snug text-white">
+                <p className="mt-3 text-sm font-medium leading-6 text-zinc-200">
                   {run.task}
                 </p>
               </div>
@@ -540,7 +556,7 @@ function AgentTimelineCard({
           <div className="hidden h-full min-h-12 w-px bg-white/10 sm:block" />
         ) : null}
       </div>
-      <article className="min-w-0 rounded-[15px] bg-[#1c1c1c] p-4 ring-1 ring-white/10">
+      <article className="min-w-0 rounded-[8px] bg-[#1c1c1c] p-4 ring-1 ring-white/10">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h3 className="text-base font-semibold text-white">{agent.name}</h3>
@@ -555,7 +571,7 @@ function AgentTimelineCard({
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             {highlights.map((highlight) => (
               <div
-                className="rounded-[10px] bg-black/25 px-3 py-2 text-sm text-zinc-300 ring-1 ring-white/10"
+                className="rounded-[6px] bg-black/25 px-3 py-2 text-sm text-zinc-300 ring-1 ring-white/10"
                 key={highlight}
               >
                 {highlight}
@@ -567,11 +583,12 @@ function AgentTimelineCard({
         {hasTechnicalLog ? (
           <>
             <button
-              className="mt-4 rounded-full bg-black/30 px-3 py-2 text-xs font-medium text-zinc-300 ring-1 ring-white/10 transition hover:text-white"
+              className="mt-4 inline-flex items-center gap-2 rounded-[6px] bg-black/30 px-3 py-2 text-xs font-medium text-zinc-300 ring-1 ring-white/10 transition hover:text-white"
               onClick={toggleLog}
               type="button"
             >
-              {showLog ? "Hide technical log" : "Show technical log"}
+              <span>{showLog ? "Hide technical log" : "Show technical log"}</span>
+              <ChevronIcon open={showLog} />
             </button>
             {showLog ? (
               <TechnicalLog agent={agent} run={run} />
@@ -702,7 +719,13 @@ function LogSection({
   );
 }
 
-function ChangedFilesPanel({ run }: { run: RunResponse | null }) {
+function ChangedFilesPanel({
+  run,
+  onOpenDiff,
+}: {
+  run: RunResponse | null;
+  onOpenDiff: (file: ChangedFile) => void;
+}) {
   return (
     <Panel title="Changed Files">
       {run ? (
@@ -710,7 +733,7 @@ function ChangedFilesPanel({ run }: { run: RunResponse | null }) {
           <div className="grid gap-3">
             {run.changed_files.map((file) => (
               <article
-                className="rounded-[15px] bg-[#1c1c1c] p-4 ring-1 ring-white/10"
+                className="rounded-[8px] bg-[#1c1c1c] p-4 ring-1 ring-white/10"
                 key={file.path}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -736,6 +759,13 @@ function ChangedFilesPanel({ run }: { run: RunResponse | null }) {
                       {file.diff_stat}
                     </span>
                   ) : null}
+                  <button
+                    className="ml-auto rounded-[6px] bg-[#071521] px-3 py-1.5 text-xs font-medium text-[#8fd0ff] ring-1 ring-[#0099ff]/30 transition hover:bg-[#0a2033] hover:text-white"
+                    onClick={() => onOpenDiff(file)}
+                    type="button"
+                  >
+                    See diff
+                  </button>
                 </div>
               </article>
             ))}
@@ -760,21 +790,23 @@ function PrSummaryPanel({ run }: { run: RunResponse | null }) {
     <Panel title="PR Summary">
       {run ? (
         <div className="grid gap-5 lg:grid-cols-[0.92fr_1.08fr]">
-          <div className="rounded-[15px] bg-white p-5 text-black">
-            <p className="text-xs font-medium uppercase text-zinc-500">Title</p>
-            <h2 className="mt-3 text-2xl font-semibold leading-tight">
+          <div className="rounded-[8px] bg-[#1c1c1c] p-5 text-white ring-1 ring-white/10">
+            <p className="text-xs font-medium uppercase text-zinc-500">
+              Given task
+            </p>
+            <h2 className="mt-3 text-lg font-semibold leading-snug text-white">
               {reviewTitle}
             </h2>
             <div className="mt-5 grid gap-2 sm:grid-cols-2">
-              <span className="rounded-full bg-black px-3 py-2 text-center text-xs font-medium text-white">
+              <span className="rounded-[6px] bg-emerald-400/10 px-3 py-2 text-center text-xs font-medium text-emerald-300 ring-1 ring-emerald-400/20">
                 {verificationText}
               </span>
-              <span className="rounded-full bg-zinc-100 px-3 py-2 text-center text-xs font-medium text-zinc-700">
+              <span className="rounded-[6px] bg-white/10 px-3 py-2 text-center text-xs font-medium text-zinc-200 ring-1 ring-white/10">
                 Human review required
               </span>
             </div>
           </div>
-          <div className="rounded-[15px] bg-[#1c1c1c] p-5 ring-1 ring-white/10">
+          <div className="rounded-[8px] bg-[#1c1c1c] p-5 ring-1 ring-white/10">
             <p className="text-xs font-medium uppercase text-zinc-500">
               Review notes
             </p>
@@ -806,6 +838,224 @@ function PrSummaryPanel({ run }: { run: RunResponse | null }) {
   );
 }
 
+function DiffViewer({
+  file,
+  onClose,
+}: {
+  file: ChangedFile | null;
+  onClose: () => void;
+}) {
+  if (!file) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-sm">
+      <section className="flex max-h-[92vh] w-full max-w-6xl flex-col rounded-[10px] bg-[#101010] shadow-[0_24px_80px_rgba(0,0,0,0.55)] ring-1 ring-white/15">
+        <div className="flex min-w-0 items-start justify-between gap-4 border-b border-white/10 p-4">
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase text-zinc-500">
+              File diff
+            </p>
+            <h3 className="mt-2 break-all font-mono text-base font-semibold text-white">
+              {file.path}
+            </h3>
+          </div>
+          <button
+            className="rounded-[6px] bg-white/10 px-3 py-2 text-xs font-medium text-zinc-200 ring-1 ring-white/10 transition hover:bg-white/15 hover:text-white"
+            onClick={onClose}
+            type="button"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="grid min-h-0 flex-1 gap-px overflow-hidden bg-white/10 md:grid-cols-2">
+          <CodePane
+            label="Before HEAD"
+            lines={buildLineDiff(file.before_contents ?? "", file.after_contents ?? "").before}
+          />
+          <CodePane
+            label="After working tree"
+            lines={buildLineDiff(file.before_contents ?? "", file.after_contents ?? "").after}
+          />
+        </div>
+
+        {file.content_truncated ? (
+          <p className="border-t border-white/10 px-4 py-3 text-xs text-amber-200">
+            Large file content was truncated for display.
+          </p>
+        ) : null}
+      </section>
+    </div>
+  );
+}
+
+function CodePane({
+  label,
+  lines,
+}: {
+  label: string;
+  lines: DiffLine[];
+}) {
+  return (
+    <div className="min-h-0 bg-[#141414]">
+      <div className="border-b border-white/10 px-4 py-3 text-xs font-medium uppercase text-zinc-500">
+        {label}
+      </div>
+      <div className="max-h-[70vh] min-h-[320px] overflow-auto p-3 font-mono text-xs leading-5">
+        {lines.length ? (
+          lines.map((line, index) => (
+            <div
+              className={`grid grid-cols-[30px_24px_minmax(0,1fr)] gap-2 rounded-[3px] px-2 py-0.5 ${diffLineTone(
+                line.type,
+              )}`}
+              key={`${label}-${index}`}
+            >
+              <span className="select-none text-right text-zinc-600">
+                {line.lineNumber || ""}
+              </span>
+              <span className="select-none text-center font-semibold">
+                {line.marker}
+              </span>
+              <span className="min-w-0 whitespace-pre-wrap break-words">
+                {line.value || " "}
+              </span>
+            </div>
+          ))
+        ) : (
+          <div className="rounded-[6px] bg-white/5 p-3 text-zinc-500">
+            No file content captured.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+type DiffLineType = "added" | "removed" | "unchanged" | "empty";
+
+type DiffLine = {
+  type: DiffLineType;
+  marker: "+" | "-" | " ";
+  value: string;
+  lineNumber?: number;
+};
+
+function buildLineDiff(beforeValue: string, afterValue: string) {
+  const beforeLines = splitLines(beforeValue);
+  const afterLines = splitLines(afterValue);
+  const table = buildLcsTable(beforeLines, afterLines);
+  const before: DiffLine[] = [];
+  const after: DiffLine[] = [];
+  let beforeIndex = 0;
+  let afterIndex = 0;
+
+  while (beforeIndex < beforeLines.length || afterIndex < afterLines.length) {
+    if (
+      beforeIndex < beforeLines.length &&
+      afterIndex < afterLines.length &&
+      beforeLines[beforeIndex] === afterLines[afterIndex]
+    ) {
+      before.push({
+        type: "unchanged",
+        marker: " ",
+        value: beforeLines[beforeIndex],
+        lineNumber: beforeIndex + 1,
+      });
+      after.push({
+        type: "unchanged",
+        marker: " ",
+        value: afterLines[afterIndex],
+        lineNumber: afterIndex + 1,
+      });
+      beforeIndex += 1;
+      afterIndex += 1;
+      continue;
+    }
+
+    const shouldAdd =
+      afterIndex < afterLines.length &&
+      (beforeIndex === beforeLines.length ||
+        table[beforeIndex][afterIndex + 1] >= table[beforeIndex + 1][afterIndex]);
+
+    if (shouldAdd) {
+      before.push({
+        type: "empty",
+        marker: " ",
+        value: "",
+      });
+      after.push({
+        type: "added",
+        marker: "+",
+        value: afterLines[afterIndex],
+        lineNumber: afterIndex + 1,
+      });
+      afterIndex += 1;
+      continue;
+    }
+
+    before.push({
+      type: "removed",
+      marker: "-",
+      value: beforeLines[beforeIndex],
+      lineNumber: beforeIndex + 1,
+    });
+    after.push({
+      type: "empty",
+      marker: " ",
+      value: "",
+    });
+    beforeIndex += 1;
+  }
+
+  return { before, after };
+}
+
+function splitLines(value: string) {
+  if (!value) {
+    return [];
+  }
+
+  return value.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+}
+
+function buildLcsTable(beforeLines: string[], afterLines: string[]) {
+  const table = Array.from({ length: beforeLines.length + 1 }, () =>
+    Array.from({ length: afterLines.length + 1 }, () => 0),
+  );
+
+  for (let beforeIndex = beforeLines.length - 1; beforeIndex >= 0; beforeIndex -= 1) {
+    for (let afterIndex = afterLines.length - 1; afterIndex >= 0; afterIndex -= 1) {
+      table[beforeIndex][afterIndex] =
+        beforeLines[beforeIndex] === afterLines[afterIndex]
+          ? table[beforeIndex + 1][afterIndex + 1] + 1
+          : Math.max(
+              table[beforeIndex + 1][afterIndex],
+              table[beforeIndex][afterIndex + 1],
+            );
+    }
+  }
+
+  return table;
+}
+
+function diffLineTone(type: DiffLineType) {
+  if (type === "added") {
+    return "bg-emerald-400/10 text-emerald-100";
+  }
+
+  if (type === "removed") {
+    return "bg-red-400/10 text-red-100";
+  }
+
+  if (type === "empty") {
+    return "bg-black/20 text-zinc-700";
+  }
+
+  return "text-zinc-300";
+}
+
 function MemoryColumn({
   title,
   items,
@@ -817,26 +1067,20 @@ function MemoryColumn({
 }) {
   return (
     <article
-      className={`rounded-[15px] p-4 ring-1 ${
+      className={`rounded-[4px] p-4 ring-1 ${
         featured
-          ? "bg-white text-black ring-white/20"
-          : "bg-black/25 text-white ring-white/10"
+          ? "bg-[#1c1c1c] text-white ring-[#0099ff]/25"
+          : "bg-[#1c1c1c] text-white ring-white/10"
       }`}
     >
-      <h3
-        className={`text-sm font-semibold ${
-          featured ? "text-black" : "text-white"
-        }`}
-      >
+      <h3 className="text-sm font-semibold text-white">
         {title}
       </h3>
       {items.length > 0 ? (
         <ul className="mt-4 grid gap-3">
           {items.map((item) => (
             <li
-              className={`text-sm leading-6 ${
-                featured ? "text-zinc-700" : "text-zinc-400"
-              }`}
+              className="text-sm leading-6 text-zinc-100"
               key={item}
             >
               {item}
@@ -845,9 +1089,7 @@ function MemoryColumn({
         </ul>
       ) : (
         <p
-          className={`mt-4 text-sm leading-6 ${
-            featured ? "text-zinc-600" : "text-zinc-500"
-          }`}
+          className="mt-4 text-sm leading-6 text-zinc-300"
         >
           No memory used on this run.
         </p>
