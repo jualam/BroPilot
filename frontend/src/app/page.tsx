@@ -109,7 +109,7 @@ function Panel({
 }) {
   return (
     <section
-      className={`rounded-[20px] bg-[#141414] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.28)] ring-1 ring-white/10 ${className}`}
+      className={`min-w-0 rounded-[20px] bg-[#141414] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.28)] ring-1 ring-white/10 ${className}`}
     >
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
@@ -223,8 +223,8 @@ export default function Home() {
           </div>
         </header>
 
-        <section className="grid gap-6 lg:grid-cols-[minmax(0,1.06fr)_minmax(380px,0.94fr)]">
-          <div className="rounded-[30px] bg-[#141414] p-6 ring-1 ring-white/10 sm:p-8 lg:p-10">
+        <section className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.06fr)_minmax(380px,0.94fr)]">
+          <div className="min-w-0 rounded-[30px] bg-[#141414] p-6 ring-1 ring-white/10 sm:p-8 lg:p-10">
             <div className="mb-8 max-w-3xl">
               <p className="mb-4 text-sm font-medium text-[#8fd0ff]">
                 Gitclaw SDK {"->"} code changes {"->"} pytest {"->"} review
@@ -283,7 +283,7 @@ export default function Home() {
           <RunSummaryCard run={run} runMeta={runMeta} />
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)]">
+        <section className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)]">
           <Panel title="Agent Flight Recorder" eyebrow="Execution timeline">
             {run ? (
               <ol className="grid gap-4">
@@ -304,7 +304,7 @@ export default function Home() {
             )}
           </Panel>
 
-          <div className="grid gap-6">
+          <div className="grid min-w-0 gap-6">
             <ChangedFilesPanel run={run} />
             <Panel title="Test Results" eyebrow="Verification">
               {run && testSummary ? (
@@ -328,7 +328,7 @@ export default function Home() {
                     {showTestLog ? "Hide test log" : "Show test log"}
                   </button>
                   {showTestLog ? (
-                    <pre className="mt-3 max-h-56 overflow-auto rounded-[10px] bg-black/45 p-3 font-mono text-xs leading-5 text-zinc-300 ring-1 ring-white/10">
+                    <pre className="mt-3 max-h-56 w-full max-w-full overflow-auto whitespace-pre-wrap break-words rounded-[10px] bg-black/45 p-3 font-mono text-xs leading-5 text-zinc-300 ring-1 ring-white/10">
                       {getTesterLog(run)}
                     </pre>
                   ) : null}
@@ -340,7 +340,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[0.75fr_1.25fr]">
+        <section className="grid min-w-0 gap-6 lg:grid-cols-[0.75fr_1.25fr]">
           <Panel title="Safety Panel" eyebrow="Action guardrails">
             {run ? (
               <div className="grid gap-4">
@@ -405,7 +405,7 @@ function RunSummaryCard({
   runMeta: { label: string; value: string }[] | null;
 }) {
   return (
-    <div className="rounded-[30px] bg-[linear-gradient(135deg,#d44df0_0%,#6a4cf5_46%,#ff7a3d_100%)] p-[1px]">
+    <div className="min-w-0 rounded-[30px] bg-[linear-gradient(135deg,#d44df0_0%,#6a4cf5_46%,#ff7a3d_100%)] p-[1px]">
       <div className="flex h-full flex-col justify-between rounded-[30px] bg-[#101010]/90 p-6 backdrop-blur sm:p-8">
         <div>
           <p className="mb-4 text-sm font-medium text-zinc-300">Current run</p>
@@ -488,9 +488,11 @@ function AgentTimelineCard({
 }) {
   const highlights = getAgentHighlights(agent, run);
   const hasTechnicalLog = agent.details.trim().length > 0;
+  const displaySummary =
+    agent.name === "Tester Agent" ? parseTestSummary(run).label : agent.summary;
 
   return (
-    <li className="grid gap-4 sm:grid-cols-[48px_1fr]">
+    <li className="grid min-w-0 gap-4 sm:grid-cols-[48px_minmax(0,1fr)]">
       <div className="flex items-start gap-3 sm:flex-col sm:items-center">
         <div className="grid size-12 shrink-0 place-items-center rounded-full bg-white text-sm font-semibold text-black">
           {index + 1}
@@ -499,12 +501,12 @@ function AgentTimelineCard({
           <div className="hidden h-full min-h-12 w-px bg-white/10 sm:block" />
         ) : null}
       </div>
-      <article className="rounded-[15px] bg-[#1c1c1c] p-4 ring-1 ring-white/10">
+      <article className="min-w-0 rounded-[15px] bg-[#1c1c1c] p-4 ring-1 ring-white/10">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h3 className="text-base font-semibold text-white">{agent.name}</h3>
             <p className="mt-2 text-sm leading-6 text-zinc-400">
-              {agent.summary}
+              {displaySummary}
             </p>
           </div>
           <StatusPill value={agent.status} />
@@ -533,14 +535,133 @@ function AgentTimelineCard({
               {showLog ? "Hide technical log" : "Show technical log"}
             </button>
             {showLog ? (
-              <pre className="mt-3 max-h-64 overflow-auto rounded-[10px] bg-black/45 p-3 font-mono text-xs leading-5 text-zinc-300 ring-1 ring-white/10">
-                {agent.details}
-              </pre>
+              <TechnicalLog agent={agent} run={run} />
             ) : null}
           </>
         ) : null}
       </article>
     </li>
+  );
+}
+
+function TechnicalLog({ agent, run }: { agent: AgentStep; run: RunResponse }) {
+  if (agent.name === "Analyzer Agent") {
+    const lines = agent.details
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    return (
+      <div className="mt-3 rounded-[10px] bg-black/45 p-3 ring-1 ring-white/10">
+        <p className="text-xs font-semibold uppercase text-zinc-500">
+          Git status before run
+        </p>
+        {lines.length ? (
+          <div className="mt-3 grid gap-2">
+            {lines.map((line) => (
+              <div
+                className="flex min-w-0 items-center gap-2 rounded-[8px] bg-white/5 px-3 py-2"
+                key={line}
+              >
+                <span className="shrink-0 rounded-full bg-white/10 px-2 py-1 font-mono text-[11px] text-zinc-300">
+                  {line.slice(0, 2).trim() || "clean"}
+                </span>
+                <span className="min-w-0 break-all font-mono text-xs text-zinc-300">
+                  {line.length > 3 ? line.slice(3) : line}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-zinc-300">Working tree was clean.</p>
+        )}
+      </div>
+    );
+  }
+
+  if (agent.name === "Coder Agent") {
+    return <CoderTechnicalLog details={agent.details} run={run} />;
+  }
+
+  return (
+    <pre className="mt-3 max-h-64 w-full max-w-full overflow-auto whitespace-pre-wrap break-words rounded-[10px] bg-black/45 p-3 font-mono text-xs leading-5 text-zinc-300 ring-1 ring-white/10">
+      {agent.details}
+    </pre>
+  );
+}
+
+function CoderTechnicalLog({
+  details,
+  run,
+}: {
+  details: string;
+  run: RunResponse;
+}) {
+  const sections = parseCoderLog(details);
+
+  return (
+    <div className="mt-3 grid gap-3 rounded-[10px] bg-black/45 p-3 ring-1 ring-white/10">
+      <div>
+        <p className="text-xs font-semibold uppercase text-zinc-500">
+          Code changes
+        </p>
+        <div className="mt-3 grid gap-2">
+          {run.changed_files.map((file) => (
+            <div
+              className="flex min-w-0 flex-wrap items-center gap-2 rounded-[8px] bg-white/5 px-3 py-2"
+              key={file.path}
+            >
+              <span className="min-w-0 break-all font-mono text-xs font-semibold text-white">
+                {file.path}
+              </span>
+              <span className="rounded-full bg-emerald-400/10 px-2 py-1 text-[11px] text-emerald-300">
+                +{file.additions ?? 0}
+              </span>
+              <span className="rounded-full bg-red-400/10 px-2 py-1 text-[11px] text-red-300">
+                -{file.deletions ?? 0}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <LogSection title="Run setup" lines={sections.setup} />
+      <LogSection title="Agent tool calls" lines={sections.tools} mono />
+      <LogSection title="Assistant notes" lines={sections.assistant} />
+      <LogSection title="Raw remainder" lines={sections.other} mono />
+    </div>
+  );
+}
+
+function LogSection({
+  title,
+  lines,
+  mono = false,
+}: {
+  title: string;
+  lines: string[];
+  mono?: boolean;
+}) {
+  if (!lines.length) {
+    return null;
+  }
+
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase text-zinc-500">{title}</p>
+      <div className="mt-2 grid gap-2">
+        {lines.map((line, index) => (
+          <div
+            className={`min-w-0 rounded-[8px] bg-white/5 px-3 py-2 text-xs leading-5 text-zinc-300 ${
+              mono ? "font-mono" : ""
+            }`}
+            key={`${title}-${index}`}
+          >
+            {line}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -712,6 +833,68 @@ function getAgentHighlights(agent: AgentStep, run: RunResponse) {
   return [];
 }
 
+function parseCoderLog(details: string) {
+  const setup: string[] = [];
+  const tools: string[] = [];
+  const assistant: string[] = [];
+  const other: string[] = [];
+
+  for (const rawLine of details.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) {
+      continue;
+    }
+
+    if (
+      line.startsWith("First Gitclaw") ||
+      line.startsWith("Fallback") ||
+      line.startsWith("attempt:") ||
+      line.startsWith("Temporary") ||
+      line.startsWith("command:") ||
+      line.startsWith("return_code:") ||
+      line.startsWith("runner_status:") ||
+      line.startsWith("system/")
+    ) {
+      setup.push(cleanLogLine(line));
+      continue;
+    }
+
+    if (line.startsWith("tool_use:") || line.startsWith("tool_result")) {
+      tools.push(cleanLogLine(line));
+      continue;
+    }
+
+    if (line.startsWith("assistant:")) {
+      const note = cleanLogLine(line.replace(/^assistant:\s*/, ""));
+      if (note) {
+        assistant.push(note);
+      }
+      continue;
+    }
+
+    if (line === "stdout:" || line === "stderr:") {
+      continue;
+    }
+
+    other.push(cleanLogLine(line));
+  }
+
+  return {
+    setup,
+    tools: tools.slice(0, 8),
+    assistant: assistant.slice(0, 4),
+    other: other.slice(0, 6),
+  };
+}
+
+function cleanLogLine(line: string) {
+  return line
+    .replace(/\\n/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\\"/g, '"')
+    .slice(0, 420);
+}
+
 function parseTestSummary(run: RunResponse) {
   const log = getTesterLog(run);
   const passMatch = log.match(/(\d+)\s+passed/);
@@ -724,9 +907,39 @@ function parseTestSummary(run: RunResponse) {
     };
   }
 
+  if (/SyntaxError: 'await' outside async function/.test(log)) {
+    return {
+      label: "Pytest collection failed: async middleware needs an async function.",
+    };
+  }
+
+  if (/ERROR collecting/.test(log) || /error during collection/i.test(log)) {
+    const errorFile = log.match(/ERROR collecting ([^\r\n]+)/);
+    return {
+      label: errorFile
+        ? `Pytest collection failed in ${errorFile[1].trim()}.`
+        : "Pytest collection failed before tests could run.",
+    };
+  }
+
+  const failedMatch = log.match(/(\d+)\s+failed/);
+  if (failedMatch) {
+    return {
+      label: `${failedMatch[1]} test${failedMatch[1] === "1" ? "" : "s"} failed.`,
+    };
+  }
+
   return {
-    label: run.tests.summary || "Verification output captured.",
+    label:
+      cleanStatusSummary(run.tests.summary) || "Verification output captured.",
   };
+}
+
+function cleanStatusSummary(summary: string) {
+  return summary
+    .replace(/!/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function getTesterLog(run: RunResponse) {
