@@ -4,8 +4,8 @@ This guide reproduces the local BroPilot demo flow.
 
 The demo uses two repositories:
 
-- **BroPilot app repo**: this repository, containing the Next.js dashboard, FastAPI backend, Gitclaw SDK runner, and agent configuration.
-- **Demo target repo**: a small FastAPI app that BroPilot edits during the demo.
+- **BroPilot app repo**: [jualam/BroPilot](https://github.com/jualam/BroPilot.git), containing the Next.js dashboard, FastAPI backend, Gitclaw SDK runner, and agent configuration.
+- **Demo target repo**: [jualam/broPilot-demo](https://github.com/jualam/broPilot-demo.git), a small FastAPI app that BroPilot edits during the demo.
 
 ## What This Demo Shows
 
@@ -23,12 +23,6 @@ The demo target repo is expected at:
 
 ```powershell
 D:\bropilot-demo
-```
-
-Demo target repo on GitHub:
-
-```text
-https://github.com/jualam/broPilot-demo.git
 ```
 
 Reset it to the known baseline and recreate the disposable demo branch:

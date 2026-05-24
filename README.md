@@ -6,6 +6,11 @@ BroPilot is a local-first multi-agent PR builder powered by Gitclaw. Give it a r
 
 BroPilot does not auto-merge, auto-push, or bypass human review.
 
+## Repositories
+
+- BroPilot app repo: [jualam/BroPilot](https://github.com/jualam/BroPilot.git)
+- Demo target repo: [jualam/broPilot-demo](https://github.com/jualam/broPilot-demo.git)
+
 ## What BroPilot Does
 
 BroPilot turns this:
