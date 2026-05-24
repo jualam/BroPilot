@@ -52,6 +52,7 @@ type MemoryReport = {
 type PrSummary = {
   title: string;
   body: string[];
+  markdown?: string;
 };
 
 type RunResponse = {
@@ -817,10 +818,26 @@ function ChangedFilesPanel({
 }
 
 function PrSummaryPanel({ run }: { run: RunResponse | null }) {
+  const [copied, setCopied] = useState(false);
   const reviewTitle = run ? getReviewTitle(run) : "";
   const verificationText = run
     ? `${run.tests.command} ${run.tests.status}`
     : "";
+  const markdown = run ? run.pr_summary.markdown ?? buildPrMarkdown(run) : "";
+
+  async function copyMarkdown() {
+    if (!markdown) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(markdown);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false);
+    }
+  }
 
   return (
     <Panel title="PR Summary">
@@ -865,6 +882,28 @@ function PrSummaryPanel({ run }: { run: RunResponse | null }) {
               {run.changed_files.length} changed file
               {run.changed_files.length === 1 ? "" : "s"} ready for review
             </div>
+          </div>
+          <div className="lg:col-span-2 rounded-[8px] bg-[#101010] p-5 ring-1 ring-white/10">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium uppercase text-zinc-500">
+                  Copy-ready markdown
+                </p>
+                <p className="mt-2 text-sm text-zinc-300">
+                  Prepared for a draft PR body or review comment.
+                </p>
+              </div>
+              <button
+                className="rounded-[6px] bg-[#071521] px-4 py-2 text-xs font-medium text-[#8fd0ff] ring-1 ring-[#0099ff]/30 transition hover:bg-[#0a2033] hover:text-white"
+                onClick={copyMarkdown}
+                type="button"
+              >
+                {copied ? "Copied" : "Copy markdown"}
+              </button>
+            </div>
+            <pre className="mt-4 max-h-56 overflow-auto whitespace-pre-wrap rounded-[6px] bg-black/35 p-4 font-mono text-xs leading-5 text-zinc-300 ring-1 ring-white/10">
+              {markdown}
+            </pre>
           </div>
         </div>
       ) : (
@@ -1462,6 +1501,26 @@ function getReviewTitle(run: RunResponse) {
   }
 
   return title;
+}
+
+function buildPrMarkdown(run: RunResponse) {
+  const changedFiles = run.changed_files.map((file) => `  - ${file.path}`);
+  const changedSection = changedFiles.length
+    ? ["- Changed files:", ...changedFiles]
+    : ["- No code changes were captured."];
+
+  return [
+    "## Summary",
+    `- Task: ${run.task}`,
+    ...changedSection,
+    "",
+    "## Verification",
+    `- ${run.tests.command} ${run.tests.status}`,
+    "",
+    "## Review",
+    "- Human review required before merge",
+    "- No automatic commit, push, or merge was performed",
+  ].join("\n");
 }
 
 function formatDateTime(value: string) {

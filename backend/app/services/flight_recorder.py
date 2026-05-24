@@ -1,3 +1,4 @@
+import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -43,6 +44,10 @@ def build_success_or_failure_run(
     no_code_changes = (
         gitclaw_passed and changed_count == 0 and not is_read_only_task(task)
     )
+    safety_actions = _safety_actions(task, changed_files)
+    has_safety_warnings = any(
+        action["command"] != "Protected paths guarded" for action in safety_actions
+    )
 
     if no_code_changes and gitclaw_passed and git_ok:
         status = "needs_attention"
@@ -80,20 +85,20 @@ def build_success_or_failure_run(
         },
         "safety": {
             "risk_score": _risk_score(
-                gitclaw_passed, tests_passed, git_ok, no_code_changes
+                gitclaw_passed,
+                tests_passed,
+                git_ok,
+                no_code_changes,
+                has_safety_warnings,
             ),
             "risk_reason": _risk_reason(
-                gitclaw_passed, tests_passed, git_ok, no_code_changes
+                gitclaw_passed,
+                tests_passed,
+                git_ok,
+                no_code_changes,
+                has_safety_warnings,
             ),
-            "blocked_actions": [
-                {
-                    "command": "Protected paths guarded",
-                    "reason": (
-                        "BroPilot instructed Gitclaw to avoid .env, .venv, .git, "
-                        ".gitagent, workspace, skills/, and git metadata."
-                    ),
-                }
-            ],
+            "blocked_actions": safety_actions,
         },
         "memory": {
             "before": (
@@ -116,6 +121,12 @@ def build_success_or_failure_run(
                 changed_count=changed_count,
                 no_code_changes=no_code_changes,
                 test_result=test_result,
+            ),
+            "markdown": _pr_markdown(
+                task=task,
+                changed_files=changed_files,
+                test_result=test_result,
+                safety_actions=safety_actions,
             ),
         },
     }
@@ -349,9 +360,13 @@ def _test_summary(result: TestRunResult) -> str:
 
 
 def _risk_score(
-    gitclaw_passed: bool, tests_passed: bool, git_ok: bool, no_code_changes: bool
+    gitclaw_passed: bool,
+    tests_passed: bool,
+    git_ok: bool,
+    no_code_changes: bool,
+    has_safety_warnings: bool = False,
 ) -> str:
-    if no_code_changes:
+    if no_code_changes or has_safety_warnings:
         return "medium"
 
     if gitclaw_passed and tests_passed and git_ok:
@@ -364,10 +379,17 @@ def _risk_score(
 
 
 def _risk_reason(
-    gitclaw_passed: bool, tests_passed: bool, git_ok: bool, no_code_changes: bool
+    gitclaw_passed: bool,
+    tests_passed: bool,
+    git_ok: bool,
+    no_code_changes: bool,
+    has_safety_warnings: bool = False,
 ) -> str:
     if no_code_changes:
         return "No code changes were produced, so human review is needed before treating the task as done."
+
+    if has_safety_warnings:
+        return "Review needed: Gitclaw changed at least one file outside the task or safety boundary."
 
     if gitclaw_passed and tests_passed and git_ok:
         return "Clean review signal: Gitclaw changed files, git status was captured, and pytest passed."
@@ -406,6 +428,100 @@ def _learned_change_summary(changed_count: int, no_code_changes: bool) -> str:
         return "Latest Gitclaw run produced 0 code changes and needs attention."
 
     return f"Latest run changed {changed_count} file(s)."
+
+
+def _safety_actions(task: str, changed_files: list[dict]) -> list[dict]:
+    actions = [
+        {
+            "command": "Protected paths guarded",
+            "reason": (
+                "BroPilot instructed Gitclaw to avoid .env, .venv, .git, "
+                ".gitagent, workspace, skills/, and git metadata."
+            ),
+        }
+    ]
+    changed_paths = [
+        _normalize_repo_path(str(file.get("path", "")))
+        for file in changed_files
+        if file.get("path")
+    ]
+    allowed_paths = _explicit_allowed_paths(task)
+
+    if allowed_paths:
+        unexpected_paths = [
+            path for path in changed_paths if not _path_allowed(path, allowed_paths)
+        ]
+        if unexpected_paths:
+            actions.append(
+                {
+                    "command": "Unexpected file changed",
+                    "reason": (
+                        f"{', '.join(unexpected_paths)} changed even though the task "
+                        f"requested only {', '.join(allowed_paths)}."
+                    ),
+                }
+            )
+
+    protected_changes = [
+        path
+        for path in changed_paths
+        if path.startswith(("skills/", ".env", ".venv/", ".git/", ".gitagent/", "workspace/"))
+    ]
+    if protected_changes:
+        actions.append(
+            {
+                "command": "Protected path changed",
+                "reason": (
+                    f"{', '.join(protected_changes)} changed even though BroPilot "
+                    "guardrails marked protected paths as review-sensitive."
+                ),
+            }
+        )
+
+    return actions
+
+
+def _explicit_allowed_paths(task: str) -> list[str]:
+    cleaned_task = " ".join(task.replace("\\", "/").split())
+    patterns = [
+        r"(?:update|modify|change|edit)\s+only\s+(.+?)(?:\.|$)",
+        r"only\s+(?:update|modify|change|edit)\s+(.+?)(?:\.|$)",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, cleaned_task, flags=re.IGNORECASE)
+        if not match:
+            continue
+
+        paths = _extract_repo_paths(match.group(1))
+        if paths:
+            return paths
+
+    return []
+
+
+def _extract_repo_paths(value: str) -> list[str]:
+    candidates = re.findall(r"[\w./-]+(?:\.[A-Za-z0-9_]+|/)", value)
+    paths = []
+
+    for candidate in candidates:
+        path = _normalize_repo_path(candidate)
+        if path and path not in {"py", "json"} and path not in paths:
+            paths.append(path)
+
+    return paths
+
+
+def _path_allowed(path: str, allowed_paths: list[str]) -> bool:
+    return any(
+        path == allowed_path
+        or (allowed_path.endswith("/") and path.startswith(allowed_path))
+        for allowed_path in allowed_paths
+    )
+
+
+def _normalize_repo_path(path: str) -> str:
+    return path.replace("\\", "/").strip().strip(".,;:'\"`")
 
 
 def _memory_used_items(memory_used: list[str]) -> list[str]:
@@ -449,6 +565,63 @@ def _pr_body(
         f"Captured {changed_count} changed file(s) from git status.",
         f"Verification result: python -m pytest {_status_word(test_result.return_code)}.",
     ]
+
+
+def _pr_markdown(
+    *,
+    task: str,
+    changed_files: list[dict],
+    test_result: TestRunResult,
+    safety_actions: list[dict],
+) -> str:
+    changed_paths = [
+        str(file.get("path", "")).strip()
+        for file in changed_files
+        if str(file.get("path", "")).strip()
+    ]
+    review_flags = [
+        action["reason"]
+        for action in safety_actions
+        if action["command"] != "Protected paths guarded"
+    ]
+
+    sections = [
+        "## Summary",
+        f"- Task: {task.strip()}",
+    ]
+
+    if changed_paths:
+        sections.extend(
+            [
+                "- Changed files:",
+                *[f"  - {path}" for path in changed_paths],
+            ]
+        )
+    else:
+        sections.append("- No code changes were captured.")
+
+    sections.extend(
+        [
+            "",
+            "## Verification",
+            f"- python -m pytest {_status_word(test_result.return_code)}",
+            "",
+            "## Review",
+            "- Human review required before merge",
+            "- No automatic commit, push, or merge was performed",
+        ]
+    )
+
+    if review_flags:
+        sections.extend(
+            [
+                "",
+                "## Safety Notes",
+                *[f"- {flag}" for flag in review_flags],
+            ]
+        )
+
+    return "\n".join(sections)
 
 
 def _join_output(stdout: str, stderr: str) -> str:
