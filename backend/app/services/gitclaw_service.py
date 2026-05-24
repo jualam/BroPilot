@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.services.context_preloader import preload_repo_context
+from app.services.repo_memory import memory_prompt_block
 
 
 DEFAULT_GITCLAW_MODEL = "openai:gpt-4o"
@@ -39,6 +40,7 @@ class CommandResult:
     created_scaffold_paths: list[str] = field(default_factory=list)
     scaffold_summary: str = ""
     attempt: str = "primary"
+    memory_used: list[str] = field(default_factory=list)
 
 
 PROFILE_FALLBACK_PROMPT = """Modify the existing FastAPI demo app.
@@ -59,10 +61,40 @@ Do not create root-level test files.
 Keep the change small."""
 
 
-def build_gitclaw_prompt(task: str, context_block: str = "") -> str:
+def build_test_repair_prompt(
+    task: str, test_output: str, changed_files: list[dict]
+) -> str:
+    changed_paths = [
+        str(file.get("path", "")).strip()
+        for file in changed_files
+        if str(file.get("path", "")).strip()
+    ]
+    changed_summary = ", ".join(changed_paths) if changed_paths else "No changed files captured."
+
+    return "\n\n".join(
+        [
+            "The previous Gitclaw attempt changed files, but BroPilot backend verification failed.",
+            f"ORIGINAL TASK:\n{task.strip()}",
+            f"CHANGED FILES:\n{changed_summary}",
+            "REPAIR INSTRUCTIONS:",
+            (
+                "Use write tool directly. Do not use cli or shell commands. "
+                "Do not search the filesystem. Fix the current working tree so "
+                "python -m pytest passes. Keep the intended feature behavior. "
+                "Modify only the relevant files. Do not create root-level test files."
+            ),
+            f"PYTEST FAILURE OUTPUT:\n{_compact_text(test_output, limit=5000)}",
+        ]
+    )
+
+
+def build_gitclaw_prompt(
+    task: str, context_block: str = "", memory_items: list[str] | None = None
+) -> str:
     return "\n\n".join(
         [
             f"TASK:\n{task.strip()}",
+            f"REPO MEMORY FROM PREVIOUS BROPILOT RUNS:\n{memory_prompt_block(memory_items or [])}",
             f"INSTRUCTIONS:\n{GITCLAW_GUARDRAILS}",
             f"PRELOADED REPO CONTEXT:\n{context_block.strip()}",
         ]
@@ -107,14 +139,17 @@ def run_gitclaw(
     *,
     prompt_override: str | None = None,
     attempt: str = "primary",
+    memory_items: list[str] | None = None,
 ) -> CommandResult:
     executable = shutil.which("node")
     repo_context = preload_repo_context(repo_path)
     model = get_gitclaw_model()
     created_scaffold_paths = _ensure_temporary_scaffold(repo_path, model)
     scaffold_summary = _scaffold_summary(created_scaffold_paths)
-    prompt = prompt_override or build_gitclaw_prompt(
-        task, repo_context.to_prompt_block()
+    prompt = (
+        _fallback_prompt_with_memory(prompt_override, memory_items or [])
+        if prompt_override
+        else build_gitclaw_prompt(task, repo_context.to_prompt_block(), memory_items or [])
     )
     command = [
         executable or "node",
@@ -137,6 +172,7 @@ def run_gitclaw(
             created_scaffold_paths=created_scaffold_paths,
             scaffold_summary=scaffold_summary,
             attempt=attempt,
+            memory_used=memory_items or [],
         )
 
     try:
@@ -162,6 +198,7 @@ def run_gitclaw(
             created_scaffold_paths=created_scaffold_paths,
             scaffold_summary=scaffold_summary,
             attempt=attempt,
+            memory_used=memory_items or [],
         )
 
     return CommandResult(
@@ -173,6 +210,7 @@ def run_gitclaw(
         created_scaffold_paths=created_scaffold_paths,
         scaffold_summary=scaffold_summary,
         attempt=attempt,
+        memory_used=memory_items or [],
     )
 
 
@@ -236,6 +274,16 @@ def _is_profile_lookup_task(task: str) -> bool:
 
     return any(marker in normalized for marker in profile_markers) and any(
         marker in normalized for marker in behavior_markers
+    )
+
+
+def _fallback_prompt_with_memory(prompt: str, memory_items: list[str]) -> str:
+    return "\n\n".join(
+        [
+            prompt.strip(),
+            "REPO MEMORY FROM PREVIOUS BROPILOT RUNS:",
+            memory_prompt_block(memory_items),
+        ]
     )
 
 

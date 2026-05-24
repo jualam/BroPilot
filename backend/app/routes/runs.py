@@ -18,9 +18,11 @@ from app.services.git_service import (
 )
 from app.services.gitclaw_service import (
     build_fallback_prompt,
+    build_test_repair_prompt,
     is_read_only_task,
     run_gitclaw,
 )
+from app.services.repo_memory import learn_from_run, load_repo_memory
 from app.services.test_runner import run_pytest
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
@@ -58,6 +60,7 @@ def start_run(payload: StartRunRequest):
         )
 
     try:
+        repo_memory = load_repo_memory(repo_path)
         git_before = get_git_snapshot(repo_path)
         if git_before.status.return_code != 0:
             return _save_run(
@@ -73,7 +76,9 @@ def start_run(payload: StartRunRequest):
                 )
         )
 
-        gitclaw_result = run_gitclaw(repo_path, payload.task)
+        gitclaw_result = run_gitclaw(
+            repo_path, payload.task, memory_items=repo_memory.lessons
+        )
         cleanup_result = cleanup_gitclaw_scaffold(
             repo_path,
             status_before=git_before.status.stdout,
@@ -92,6 +97,7 @@ def start_run(payload: StartRunRequest):
                 payload.task,
                 prompt_override=build_fallback_prompt(payload.task),
                 attempt="fallback",
+                memory_items=repo_memory.lessons,
             )
             fallback_cleanup_result = cleanup_gitclaw_scaffold(
                 repo_path,
@@ -104,7 +110,40 @@ def start_run(payload: StartRunRequest):
             git_after_gitclaw = get_git_snapshot(repo_path)
 
         test_result = run_pytest(repo_path)
+        repair_gitclaw_result = None
+
+        if test_result.return_code != 0 and not is_read_only_task(payload.task):
+            repair_gitclaw_result = run_gitclaw(
+                repo_path,
+                payload.task,
+                prompt_override=build_test_repair_prompt(
+                    payload.task,
+                    _join_output(test_result.stdout, test_result.stderr),
+                    git_after_gitclaw.changed_files,
+                ),
+                attempt="test-repair",
+                memory_items=repo_memory.lessons,
+            )
+            repair_cleanup_result = cleanup_gitclaw_scaffold(
+                repo_path,
+                status_before=git_before.status.stdout,
+                created_scaffold_paths=repair_gitclaw_result.created_scaffold_paths,
+            )
+            repair_gitclaw_result.stdout = _append_cleanup_summary(
+                repair_gitclaw_result.stdout, repair_cleanup_result
+            )
+            git_after_gitclaw = get_git_snapshot(repo_path)
+            test_result = run_pytest(repo_path)
+
         git_after = get_git_snapshot(repo_path)
+        learned_memory = learn_from_run(
+            repo_path=repo_path,
+            run_id=run_id,
+            task=payload.task,
+            previous_lessons=repo_memory.lessons,
+            changed_files=git_after_gitclaw.changed_files,
+            test_result=test_result,
+        )
 
         run_data = build_success_or_failure_run(
             run_id=run_id,
@@ -114,10 +153,13 @@ def start_run(payload: StartRunRequest):
             git_before=git_before,
             gitclaw_result=gitclaw_result,
             fallback_gitclaw_result=fallback_gitclaw_result,
+            repair_gitclaw_result=repair_gitclaw_result,
             first_changed_count=first_changed_count,
             test_result=test_result,
             git_after_gitclaw=git_after_gitclaw,
             git_after=git_after,
+            memory_before=repo_memory.lessons,
+            memory_learned=learned_memory,
         )
     except Exception as error:
         run_data = build_error_run(
@@ -164,3 +206,15 @@ def _append_cleanup_summary(output: str, cleanup: CleanupResult) -> str:
             )
 
     return "\n\n".join(parts)
+
+
+def _join_output(stdout: str, stderr: str) -> str:
+    parts = []
+
+    if stdout.strip():
+        parts.append(f"stdout:\n{stdout.strip()}")
+
+    if stderr.strip():
+        parts.append(f"stderr:\n{stderr.strip()}")
+
+    return "\n\n".join(parts) or "No pytest output captured."

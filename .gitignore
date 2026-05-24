@@ -13,6 +13,7 @@ dist/
 # Logs / data
 *.log
 backend/data/runs/
+backend/data/memory/
 .flight-recorder/
 
 # OS

@@ -20,18 +20,26 @@ def build_success_or_failure_run(
     git_before: GitSnapshot,
     gitclaw_result: CommandResult,
     fallback_gitclaw_result: CommandResult | None,
+    repair_gitclaw_result: CommandResult | None,
     first_changed_count: int,
     test_result: TestRunResult,
     git_after_gitclaw: GitSnapshot,
     git_after: GitSnapshot,
+    memory_before: list[str] | None = None,
+    memory_learned: list[str] | None = None,
 ) -> dict:
     completed_at = _now()
-    final_gitclaw_result = fallback_gitclaw_result or gitclaw_result
+    final_gitclaw_result = (
+        repair_gitclaw_result or fallback_gitclaw_result or gitclaw_result
+    )
     tests_passed = test_result.return_code == 0
     gitclaw_passed = final_gitclaw_result.return_code == 0
     git_ok = git_after.status.return_code == 0
     changed_files = git_after_gitclaw.changed_files
     changed_count = len(changed_files)
+    memory_before = memory_before or []
+    memory_learned = memory_learned or []
+    memory_used = gitclaw_result.memory_used
     no_code_changes = (
         gitclaw_passed and changed_count == 0 and not is_read_only_task(task)
     )
@@ -52,10 +60,11 @@ def build_success_or_failure_run(
         "completed_at": completed_at,
         "agents": [
             _analyzer_agent(git_before),
-            _planner_agent(task, gitclaw_result.preloaded_files),
+            _planner_agent(task, gitclaw_result.preloaded_files, memory_used),
             _coder_agent(
                 gitclaw_result,
                 fallback_gitclaw_result,
+                repair_gitclaw_result,
                 first_changed_count,
                 changed_count,
                 no_code_changes,
@@ -84,16 +93,18 @@ def build_success_or_failure_run(
             ],
         },
         "memory": {
-            "before": ["No persisted repo-specific memory store is enabled yet."],
-            "learned": [
+            "before": (
+                memory_before
+                if memory_before
+                else ["No prior repo memory loaded for this run."]
+            ),
+            "learned": memory_learned
+            or [
                 f"Use python -m pytest to verify changes in {repo_path.name}.",
                 _learned_change_summary(changed_count, no_code_changes),
                 "Keep BroPilot changes small and reviewable before PR creation.",
             ],
-            "used": [
-                "Applied protected-path guardrails before invoking Gitclaw.",
-                "Backend subprocess runner handled verification instead of Gitclaw shell tools.",
-            ],
+            "used": _memory_used_items(memory_used),
         },
         "pr_summary": {
             "title": _pr_title(task),
@@ -172,7 +183,7 @@ def build_error_run(
             ],
         },
         "memory": {
-            "before": ["No persisted repo-specific memory store is enabled yet."],
+            "before": ["No prior repo memory loaded for this run."],
             "learned": [message],
             "used": [],
         },
@@ -204,7 +215,9 @@ def _analyzer_agent(git_before: GitSnapshot) -> dict:
     }
 
 
-def _planner_agent(task: str, preloaded_files: list[str]) -> dict:
+def _planner_agent(
+    task: str, preloaded_files: list[str], memory_used: list[str]
+) -> dict:
     return {
         "name": "Planner Agent",
         "status": "completed",
@@ -213,6 +226,7 @@ def _planner_agent(task: str, preloaded_files: list[str]) -> dict:
             "\n\n".join(
                 [
                     f"Task: {task}",
+                    f"Repo memory loaded: {_memory_loaded_summary(memory_used)}",
                     f"Preloaded files: {_preloaded_files_summary(preloaded_files)}",
                     f"Guardrails: {GITCLAW_GUARDRAILS}",
                 ]
@@ -224,11 +238,12 @@ def _planner_agent(task: str, preloaded_files: list[str]) -> dict:
 def _coder_agent(
     result: CommandResult,
     fallback_result: CommandResult | None,
+    repair_result: CommandResult | None,
     first_changed_count: int,
     final_changed_count: int,
     no_code_changes: bool,
 ) -> dict:
-    final_result = fallback_result or result
+    final_result = repair_result or fallback_result or result
 
     if no_code_changes:
         status = "needs_attention"
@@ -237,6 +252,9 @@ def _coder_agent(
             if fallback_result
             else "Gitclaw completed but produced 0 code changes."
         )
+    elif repair_result and final_result.return_code == 0:
+        status = "completed"
+        summary = "Gitclaw ran a test repair attempt after pytest failed."
     elif final_result.return_code == 0:
         status = "completed"
         summary = (
@@ -259,6 +277,7 @@ def _coder_agent(
             _coder_details(
                 result,
                 fallback_result,
+                repair_result,
                 first_changed_count,
                 final_changed_count,
             )
@@ -367,6 +386,28 @@ def _learned_change_summary(changed_count: int, no_code_changes: bool) -> str:
     return f"Latest run changed {changed_count} file(s)."
 
 
+def _memory_used_items(memory_used: list[str]) -> list[str]:
+    items = [
+        "Applied protected-path guardrails before invoking Gitclaw.",
+        "Backend subprocess runner handled verification instead of Gitclaw shell tools.",
+    ]
+
+    if memory_used:
+        items.insert(0, f"Loaded {len(memory_used)} repo memory item(s) into the Gitclaw prompt.")
+        items.extend(memory_used[:5])
+    else:
+        items.insert(0, "No previous repo memory was available, so BroPilot started fresh.")
+
+    return items
+
+
+def _memory_loaded_summary(memory_used: list[str]) -> str:
+    if not memory_used:
+        return "No prior repo memory found."
+
+    return f"Loaded {len(memory_used)} repo memory item(s): {', '.join(memory_used[:4])}"
+
+
 def _pr_body(
     *,
     repo_path: Path,
@@ -445,6 +486,7 @@ def _display_command(command: list[str]) -> str:
 def _coder_details(
     result: CommandResult,
     fallback_result: CommandResult | None,
+    repair_result: CommandResult | None,
     first_changed_count: int,
     final_changed_count: int,
 ) -> str:
@@ -464,6 +506,16 @@ def _coder_details(
                     else "Fallback also produced 0 changes."
                 ),
                 _result_details(fallback_result),
+            ]
+        )
+
+    if repair_result:
+        sections.extend(
+            [
+                "BroPilot backend verification failed after the first code attempt.",
+                "Test repair Gitclaw attempt started with pytest output in the prompt.",
+                f"After repair, git status shows {final_changed_count} changed file(s).",
+                _result_details(repair_result),
             ]
         )
 
