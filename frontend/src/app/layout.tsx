@@ -4,6 +4,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "BroPilot",
   description: "A safe multi-agent PR builder for reviewable code changes.",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

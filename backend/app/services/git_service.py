@@ -27,6 +27,7 @@ class CleanupResult:
 class GitSnapshot:
     status: GitCommandResult
     diff_stat: GitCommandResult
+    diff_numstat: GitCommandResult
     diff_summary: GitCommandResult
     changed_files: list[dict[str, str]]
 
@@ -34,15 +35,22 @@ class GitSnapshot:
 def get_git_snapshot(repo_path: Path) -> GitSnapshot:
     status = run_git(repo_path, ["status", "--porcelain"])
     diff_stat = run_git(repo_path, ["diff", "--stat"])
+    diff_numstat = run_git(repo_path, ["diff", "--numstat", "HEAD", "--"])
     diff_summary = run_git(repo_path, ["diff", "--summary"])
 
+    diff_stats = (
+        parse_numstat(diff_numstat.stdout) if diff_numstat.return_code == 0 else {}
+    )
     changed_files = (
-        parse_changed_files(status.stdout) if status.return_code == 0 else []
+        parse_changed_files(status.stdout, diff_stats)
+        if status.return_code == 0
+        else []
     )
 
     return GitSnapshot(
         status=status,
         diff_stat=diff_stat,
+        diff_numstat=diff_numstat,
         diff_summary=diff_summary,
         changed_files=changed_files,
     )
@@ -168,8 +176,11 @@ def run_git(repo_path: Path, args: list[str]) -> GitCommandResult:
     )
 
 
-def parse_changed_files(status_output: str) -> list[dict[str, str]]:
+def parse_changed_files(
+    status_output: str, diff_stats: dict[str, dict[str, int]] | None = None
+) -> list[dict[str, str]]:
     files: list[dict[str, str]] = []
+    diff_stats = diff_stats or {}
 
     for line in status_output.splitlines():
         if len(line) < 4:
@@ -185,10 +196,44 @@ def parse_changed_files(status_output: str) -> list[dict[str, str]]:
                 "path": path,
                 "change_type": change_type,
                 "summary": f"{change_type.capitalize()} in the working tree.",
+                "additions": diff_stats.get(path, {}).get("additions", 0),
+                "deletions": diff_stats.get(path, {}).get("deletions", 0),
+                "diff_stat": _format_file_stat(path, diff_stats.get(path)),
             }
         )
 
     return files
+
+
+def parse_numstat(numstat_output: str) -> dict[str, dict[str, int]]:
+    stats: dict[str, dict[str, int]] = {}
+
+    for line in numstat_output.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 3:
+            continue
+
+        additions = _parse_count(parts[0])
+        deletions = _parse_count(parts[1])
+        path = parts[2].split(" => ")[-1].strip("{}")
+
+        stats[path] = {
+            "additions": additions,
+            "deletions": deletions,
+        }
+
+    return stats
+
+
+def _parse_count(value: str) -> int:
+    return int(value) if value.isdigit() else 0
+
+
+def _format_file_stat(path: str, stats: dict[str, int] | None) -> str:
+    if not stats:
+        return f"{path} +0 -0"
+
+    return f"{path} +{stats['additions']} -{stats['deletions']}"
 
 
 def _parse_status_entries(status_output: str) -> list[dict[str, str]]:
