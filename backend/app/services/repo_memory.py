@@ -22,7 +22,11 @@ class RepoMemory:
 
 def load_repo_memory(repo_path: Path) -> RepoMemory:
     file_path = _memory_file_path(repo_path)
+    legacy_file_path = _legacy_memory_file_path(repo_path)
     repo_name = repo_path.name
+
+    if not file_path.exists() and legacy_file_path.exists():
+        file_path = legacy_file_path
 
     if not file_path.exists():
         return RepoMemory(file_path=file_path, repo_name=repo_name, lessons=[])
@@ -69,9 +73,12 @@ def learn_from_run(
     )
     merged_lessons = _dedupe([*learned, *previous_lessons])[:MAX_LESSONS]
     file_path = _memory_file_path(repo_path)
+    legacy_file_path = _legacy_memory_file_path(repo_path)
     MEMORY_DIR.mkdir(parents=True, exist_ok=True)
 
     existing_runs = _load_runs(file_path)
+    if not existing_runs and legacy_file_path.exists():
+        existing_runs = _load_runs(legacy_file_path)
     run_entry = {
         "run_id": run_id,
         "task": _compact(task, 160),
@@ -127,14 +134,22 @@ def _build_lessons(
 
 
 def _memory_file_path(repo_path: Path) -> Path:
+    return MEMORY_DIR / f"{_safe_repo_name(repo_path)}-data.json"
+
+
+def _legacy_memory_file_path(repo_path: Path) -> Path:
     resolved = str(repo_path.resolve()).lower()
     digest = hashlib.sha1(resolved.encode("utf-8")).hexdigest()[:10]
+    return MEMORY_DIR / f"{_safe_repo_name(repo_path)}-{digest}.json"
+
+
+def _safe_repo_name(repo_path: Path) -> str:
     safe_name = "".join(
         character if character.isalnum() or character in ("-", "_") else "-"
         for character in repo_path.name.lower()
     ).strip("-") or "repo"
 
-    return MEMORY_DIR / f"{safe_name}-{digest}.json"
+    return safe_name
 
 
 def _load_runs(file_path: Path) -> list[dict]:

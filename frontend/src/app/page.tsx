@@ -39,6 +39,7 @@ type BlockedAction = {
 
 type SafetyReport = {
   risk_score: string;
+  risk_reason?: string;
   blocked_actions: BlockedAction[];
 };
 
@@ -85,6 +86,24 @@ function getStatusTone(status: string) {
   return (
     statusTone[status.toLowerCase()] ?? "bg-white/10 text-zinc-300 ring-white/15"
   );
+}
+
+function getRiskExplanation(risk: string) {
+  const normalized = risk.toLowerCase();
+
+  if (normalized === "low") {
+    return "Clean review signal: Gitclaw changed files, git status was captured, and pytest passed.";
+  }
+
+  if (normalized === "medium") {
+    return "Review needed: BroPilot captured the patch, but the run needs attention before it is treated as ready.";
+  }
+
+  if (normalized === "high") {
+    return "High attention: BroPilot could not reliably capture the final review state.";
+  }
+
+  return "BroPilot summarizes safety from the agent result, git status, and pytest verification.";
 }
 
 function StatusPill({ value }: { value: string }) {
@@ -388,20 +407,26 @@ export default function Home() {
             {run ? (
               <div className="grid gap-4">
                 <div className="rounded-[8px] bg-[#1c1c1c] p-4 ring-1 ring-white/10">
-                  <p className="text-sm text-zinc-500">Risk score</p>
-                  <div className="mt-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <p className="text-sm font-semibold text-white">
+                      Review signal
+                    </p>
                     <StatusPill value={run.safety.risk_score} />
                   </div>
+                  <p className="mt-3 text-sm leading-6 text-zinc-300">
+                    {run.safety.risk_reason ??
+                      getRiskExplanation(run.safety.risk_score)}
+                  </p>
                 </div>
                 <div className="grid gap-3">
                   {run.safety.blocked_actions.map((action) => (
                     <article
-                      className="rounded-[8px] bg-orange-400/10 p-4 ring-1 ring-orange-300/15"
+                      className="rounded-[8px] bg-[#1c1c1c] p-4 ring-1 ring-white/10"
                       key={action.command}
                     >
-                      <code className="font-mono text-sm text-orange-100">
+                      <p className="text-sm font-semibold text-white">
                         {action.command}
-                      </code>
+                      </p>
                       <p className="mt-3 text-sm leading-6 text-zinc-300">
                         {action.reason}
                       </p>
@@ -424,13 +449,24 @@ export default function Home() {
 
                   return (
                     <>
-                      <MemoryColumn title="Before" items={memory.before} />
                       <MemoryColumn
-                        title="Learned"
+                        title="Before this run"
+                        description="Curated repo facts BroPilot already had."
+                        items={memory.before}
+                        expandedItems={memory.beforeAll}
+                        expandedLabel="Show all memory"
+                      />
+                      <MemoryColumn
+                        title="Used in prompt"
+                        description="Memory and guardrails sent into Gitclaw."
+                        items={memory.used}
+                      />
+                      <MemoryColumn
+                        title="Learned after this run"
+                        description="New memory recorded after verification."
                         items={memory.learned}
                         featured
                       />
-                      <MemoryColumn title="Used" items={memory.used} />
                     </>
                   );
                 })()}
@@ -1058,13 +1094,23 @@ function diffLineTone(type: DiffLineType) {
 
 function MemoryColumn({
   title,
+  description,
   items,
+  expandedItems,
+  expandedLabel = "Show more",
   featured = false,
 }: {
   title: string;
+  description: string;
   items: string[];
+  expandedItems?: string[];
+  expandedLabel?: string;
   featured?: boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const visibleItems = expanded && expandedItems ? expandedItems : items;
+  const canExpand = Boolean(expandedItems && expandedItems.length > items.length);
+
   return (
     <article
       className={`rounded-[4px] p-4 ring-1 ${
@@ -1073,20 +1119,33 @@ function MemoryColumn({
           : "bg-[#1c1c1c] text-white ring-white/10"
       }`}
     >
-      <h3 className="text-sm font-semibold text-white">
+      <h3 className="text-base font-semibold text-white">
         {title}
       </h3>
+      <p className="mt-1 text-xs leading-5 text-zinc-400">{description}</p>
       {items.length > 0 ? (
-        <ul className="mt-4 grid gap-3">
-          {items.map((item) => (
-            <li
-              className="text-sm leading-6 text-zinc-100"
-              key={item}
+        <>
+          <ul className="mt-4 grid gap-3">
+            {visibleItems.map((item) => (
+              <li
+                className="text-sm leading-6 text-zinc-100"
+                key={item}
+              >
+                {item}
+              </li>
+            ))}
+          </ul>
+          {canExpand ? (
+            <button
+              className="mt-4 inline-flex items-center gap-2 rounded-[5px] bg-black/25 px-3 py-2 text-xs font-medium text-[#9fd7ff] ring-1 ring-[#0099ff]/20 transition hover:bg-[#0099ff]/10 hover:text-white"
+              onClick={() => setExpanded((current) => !current)}
+              type="button"
             >
-              {item}
-            </li>
-          ))}
-        </ul>
+              {expanded ? "Show curated memory" : expandedLabel}
+              <ChevronIcon open={expanded} />
+            </button>
+          ) : null}
+        </>
       ) : (
         <p
           className="mt-4 text-sm leading-6 text-zinc-300"
@@ -1312,7 +1371,8 @@ function parseGitStatusRows(details: string) {
 }
 
 function buildMemoryDisplay(memory: MemoryReport) {
-  const before = compactBeforeMemory(friendlyMemoryItems(memory.before));
+  const beforeAll = uniqueItems(friendlyMemoryItems(memory.before));
+  const before = compactBeforeMemory(beforeAll);
   const learnedRaw = uniqueItems(memory.learned);
   const beforeKeys = new Set(before.map(normalizeMemoryKey));
   const learnedNew = learnedRaw.filter(
@@ -1322,6 +1382,7 @@ function buildMemoryDisplay(memory: MemoryReport) {
 
   return {
     before,
+    beforeAll,
     learned: learnedNew.length ? learnedNew : ["No new repo memory was added."],
     used,
   };
@@ -1352,9 +1413,17 @@ function compactBeforeMemory(items: string[]) {
     verificationNotes.find((item) => item.includes("passed")) ?? null;
   const latestVerification =
     latestPassed ?? verificationNotes[verificationNotes.length - 1] ?? null;
-  const repoFacts = unique.filter((item) => !item.startsWith("Last verification"));
+  const stableFacts = unique
+    .filter(
+      (item) =>
+        !item.startsWith("Last verification") &&
+        !item.startsWith("Recent BroPilot changes touched"),
+    )
+    .slice(0, 4);
 
-  return latestVerification ? [...repoFacts, latestVerification] : repoFacts;
+  return latestVerification
+    ? [...stableFacts, latestVerification]
+    : stableFacts.slice(0, 5);
 }
 
 function uniqueItems(items: string[]) {

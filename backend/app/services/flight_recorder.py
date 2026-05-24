@@ -82,12 +82,15 @@ def build_success_or_failure_run(
             "risk_score": _risk_score(
                 gitclaw_passed, tests_passed, git_ok, no_code_changes
             ),
+            "risk_reason": _risk_reason(
+                gitclaw_passed, tests_passed, git_ok, no_code_changes
+            ),
             "blocked_actions": [
                 {
-                    "command": "protected path edits",
+                    "command": "Protected paths guarded",
                     "reason": (
-                        "Gitclaw was instructed not to touch .env, .venv, .git, "
-                        ".gitagent, workspace, or git metadata."
+                        "BroPilot instructed Gitclaw to avoid .env, .venv, .git, "
+                        ".gitagent, workspace, skills/, and git metadata."
                     ),
                 }
             ],
@@ -358,6 +361,21 @@ def _risk_score(
         return "medium"
 
     return "high"
+
+
+def _risk_reason(
+    gitclaw_passed: bool, tests_passed: bool, git_ok: bool, no_code_changes: bool
+) -> str:
+    if no_code_changes:
+        return "No code changes were produced, so human review is needed before treating the task as done."
+
+    if gitclaw_passed and tests_passed and git_ok:
+        return "Clean review signal: Gitclaw changed files, git status was captured, and pytest passed."
+
+    if git_ok:
+        return "Review needed: BroPilot captured the patch, but verification did not fully pass."
+
+    return "High attention: BroPilot could not reliably capture git status for the final review."
 
 
 def _pr_title(task: str) -> str:
