@@ -1,6 +1,11 @@
 # BroPilot Demo Guide
 
-This guide reproduces the demo flow used for the GitAgent/Gitclaw hiring challenge submission.
+This guide reproduces the local BroPilot demo flow.
+
+The demo uses two repositories:
+
+- **BroPilot app repo**: this repository, containing the Next.js dashboard, FastAPI backend, Gitclaw SDK runner, and agent configuration.
+- **Demo target repo**: a small FastAPI app that BroPilot edits during the demo.
 
 ## What This Demo Shows
 
@@ -8,10 +13,22 @@ BroPilot turns a local repo path and engineering task into a reviewable code cha
 
 ## Reset The Demo Repo
 
+Clone or place the BroPilot app repo at:
+
+```powershell
+D:\Applications\BroPilot
+```
+
 The demo target repo is expected at:
 
 ```powershell
 D:\bropilot-demo
+```
+
+Demo target repo on GitHub:
+
+```text
+https://github.com/jualam/broPilot-demo.git
 ```
 
 Reset it to the known baseline and recreate the disposable demo branch:
