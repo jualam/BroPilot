@@ -365,7 +365,11 @@ def _pr_title(task: str) -> str:
     if not cleaned:
         return "BroPilot code changes"
 
-    return cleaned[:80]
+    if len(cleaned) <= 100:
+        return cleaned
+
+    candidate = cleaned[:100].rsplit(" ", 1)[0].strip()
+    return f"{candidate or cleaned[:100].strip()}..."
 
 
 def _status_word(return_code: int) -> str:

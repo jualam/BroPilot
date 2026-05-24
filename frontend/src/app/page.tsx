@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 
 const API_URL = "http://127.0.0.1:8000/api/runs/start";
 const DEFAULT_REPO_PATH = "D:\\bropilot-demo";
-const DEFAULT_TASK = "Fix profile lookup to return 404 for unknown users and add tests";
+const DEFAULT_TASK = "";
 
 type AgentStep = {
   name: string;
@@ -134,6 +134,33 @@ function EmptyPanel({ label }: { label: string }) {
   );
 }
 
+function WorkflowSteps() {
+  const steps = [
+    "Provide repository",
+    "Gitclaw SDK",
+    "Code changes",
+    "Pytest",
+    "Review summary",
+  ];
+
+  return (
+    <section className="rounded-[20px] bg-[#101010] p-4 ring-1 ring-[#0099ff]/20 shadow-[0_0_60px_rgba(0,153,255,0.08)]">
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        {steps.map((step, index) => (
+          <div className="flex items-center gap-2" key={step}>
+            <span className="rounded-[6px] bg-[#071521] px-3 py-2 text-xs font-medium text-[#8fd0ff] ring-1 ring-[#0099ff]/35 shadow-[0_0_24px_rgba(0,153,255,0.14)]">
+              {step}
+            </span>
+            {index < steps.length - 1 ? (
+              <span className="text-xs text-[#0099ff]/60">-&gt;</span>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default function Home() {
   const [repoPath, setRepoPath] = useState(DEFAULT_REPO_PATH);
   const [task, setTask] = useState(DEFAULT_TASK);
@@ -153,6 +180,8 @@ export default function Home() {
       { label: "Status", value: run.status.replace("_", " ") },
       { label: "Changed", value: `${run.changed_files.length} files` },
       { label: "Tests", value: run.tests.status },
+      { label: "Started", value: formatDateTime(run.started_at) },
+      { label: "Completed", value: formatDateTime(run.completed_at) },
     ];
   }, [run]);
 
@@ -223,21 +252,19 @@ export default function Home() {
           </div>
         </header>
 
-        <section className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.06fr)_minmax(380px,0.94fr)]">
-          <div className="min-w-0 rounded-[30px] bg-[#141414] p-6 ring-1 ring-white/10 sm:p-8 lg:p-10">
-            <div className="mb-8 max-w-3xl">
-              <p className="mb-4 text-sm font-medium text-[#8fd0ff]">
-                Gitclaw SDK {"->"} code changes {"->"} pytest {"->"} review
-                summary
-              </p>
-              <h1 className="max-w-3xl text-5xl font-semibold leading-none text-white sm:text-6xl lg:text-7xl">
-                BroPilot
-              </h1>
-              <p className="mt-5 max-w-2xl text-lg leading-7 text-zinc-400 sm:text-xl">
-                Your repo&apos;s AI teammate for safe, reviewable code changes.
-              </p>
-            </div>
+        <section className="mx-auto max-w-3xl py-4 text-center">
+          <h1 className="bg-[linear-gradient(90deg,#ffffff_0%,#0099ff_34%,#ffffff_58%,#d44df0_82%,#ff7a3d_100%)] bg-clip-text text-5xl font-semibold leading-none text-transparent drop-shadow-[0_0_42px_rgba(0,153,255,0.38)] sm:text-6xl lg:text-7xl">
+            BroPilot
+          </h1>
+          <p className="mx-auto mt-5 max-w-2xl text-lg leading-7 text-zinc-400 sm:text-xl">
+            Your repo&apos;s AI teammate for safe, reviewable code changes.
+          </p>
+        </section>
 
+        <WorkflowSteps />
+
+        <section className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.06fr)_minmax(380px,0.94fr)]">
+          <div className="min-w-0 rounded-[20px] bg-[#141414] p-6 ring-1 ring-white/10 sm:p-8">
             <form className="grid gap-4" onSubmit={startRun}>
               <label className="grid gap-2">
                 <span className="text-sm font-medium text-zinc-300">
@@ -283,8 +310,8 @@ export default function Home() {
           <RunSummaryCard run={run} runMeta={runMeta} />
         </section>
 
-        <section className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)]">
-          <Panel title="Agent Flight Recorder" eyebrow="Execution timeline">
+        <section className="min-w-0">
+          <Panel title="Agent Flight Recorder">
             {run ? (
               <ol className="grid gap-4">
                 {run.agents.map((agent, index) => (
@@ -303,45 +330,45 @@ export default function Home() {
               <EmptyPanel label="No run captured yet." />
             )}
           </Panel>
+        </section>
 
-          <div className="grid min-w-0 gap-6">
-            <ChangedFilesPanel run={run} />
-            <Panel title="Test Results" eyebrow="Verification">
-              {run && testSummary ? (
-                <div className="rounded-[15px] bg-[#1c1c1c] p-4 ring-1 ring-white/10">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-white">
-                        {run.tests.command} {run.tests.status}
-                      </p>
-                      <p className="mt-2 text-sm text-zinc-400">
-                        {testSummary.label}
-                      </p>
-                    </div>
-                    <StatusPill value={run.tests.status} />
+        <section className="grid min-w-0 gap-6 lg:grid-cols-2">
+          <ChangedFilesPanel run={run} />
+          <Panel title="Test Results">
+            {run && testSummary ? (
+              <div className="rounded-[15px] bg-[#1c1c1c] p-4 ring-1 ring-white/10">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-white">
+                      {run.tests.command} {run.tests.status}
+                    </p>
+                    <p className="mt-2 text-sm text-zinc-400">
+                      {testSummary.label}
+                    </p>
                   </div>
-                  <button
-                    className="mt-4 rounded-full bg-black/30 px-3 py-2 text-xs font-medium text-zinc-300 ring-1 ring-white/10 transition hover:text-white"
-                    onClick={() => setShowTestLog((current) => !current)}
-                    type="button"
-                  >
-                    {showTestLog ? "Hide test log" : "Show test log"}
-                  </button>
-                  {showTestLog ? (
-                    <pre className="mt-3 max-h-56 w-full max-w-full overflow-auto whitespace-pre-wrap break-words rounded-[10px] bg-black/45 p-3 font-mono text-xs leading-5 text-zinc-300 ring-1 ring-white/10">
-                      {getTesterLog(run)}
-                    </pre>
-                  ) : null}
+                  <StatusPill value={run.tests.status} />
                 </div>
-              ) : (
-                <EmptyPanel label="Test output is waiting for execution." />
-              )}
-            </Panel>
-          </div>
+                <button
+                  className="mt-4 rounded-full bg-black/30 px-3 py-2 text-xs font-medium text-zinc-300 ring-1 ring-white/10 transition hover:text-white"
+                  onClick={() => setShowTestLog((current) => !current)}
+                  type="button"
+                >
+                  {showTestLog ? "Hide test log" : "Show test log"}
+                </button>
+                {showTestLog ? (
+                  <pre className="mt-3 max-h-56 w-full max-w-full overflow-auto whitespace-pre-wrap break-words rounded-[10px] bg-black/45 p-3 font-mono text-xs leading-5 text-zinc-300 ring-1 ring-white/10">
+                    {getTesterLog(run)}
+                  </pre>
+                ) : null}
+              </div>
+            ) : (
+              <EmptyPanel label="Test output is waiting for execution." />
+            )}
+          </Panel>
         </section>
 
         <section className="grid min-w-0 gap-6 lg:grid-cols-[0.75fr_1.25fr]">
-          <Panel title="Safety Panel" eyebrow="Action guardrails">
+          <Panel title="Safety Panel">
             {run ? (
               <div className="grid gap-4">
                 <div className="rounded-[15px] bg-[#1c1c1c] p-4 ring-1 ring-white/10">
@@ -374,16 +401,24 @@ export default function Home() {
           <Panel
             className="bg-[linear-gradient(135deg,rgba(212,77,240,0.22),rgba(20,20,20,1)_38%,rgba(0,153,255,0.16))]"
             title="Memory Panel"
-            eyebrow="Repository learning"
           >
             {run ? (
               <div className="grid gap-4 md:grid-cols-3">
-                <MemoryColumn
-                  title="Before"
-                  items={friendlyMemoryItems(run.memory.before)}
-                />
-                <MemoryColumn title="Learned" items={run.memory.learned} featured />
-                <MemoryColumn title="Used" items={run.memory.used} />
+                {(() => {
+                  const memory = buildMemoryDisplay(run.memory);
+
+                  return (
+                    <>
+                      <MemoryColumn title="Before" items={memory.before} />
+                      <MemoryColumn
+                        title="Learned"
+                        items={memory.learned}
+                        featured
+                      />
+                      <MemoryColumn title="Used" items={memory.used} />
+                    </>
+                  );
+                })()}
               </div>
             ) : (
               <EmptyPanel label="BroPilot memory will grow from each reviewed run." />
@@ -405,8 +440,8 @@ function RunSummaryCard({
   runMeta: { label: string; value: string }[] | null;
 }) {
   return (
-    <div className="min-w-0 rounded-[30px] bg-[linear-gradient(135deg,#d44df0_0%,#6a4cf5_46%,#ff7a3d_100%)] p-[1px]">
-      <div className="flex h-full flex-col justify-between rounded-[30px] bg-[#101010]/90 p-6 backdrop-blur sm:p-8">
+    <div className="min-w-0 rounded-[20px] bg-[#141414] p-6 ring-1 ring-white/10 sm:p-8">
+      <div className="flex h-full flex-col justify-between">
         <div>
           <p className="mb-4 text-sm font-medium text-zinc-300">Current run</p>
           {run ? (
@@ -420,10 +455,14 @@ function RunSummaryCard({
                   Human review required
                 </span>
               </div>
-              <h2 className="text-3xl font-semibold leading-tight text-white">
-                {run.pr_summary.title}
-              </h2>
-              <p className="mt-4 text-sm leading-6 text-zinc-400">{run.task}</p>
+              <div className="rounded-[12px] bg-white/10 p-4 ring-1 ring-white/10">
+                <p className="text-xs font-medium uppercase text-zinc-500">
+                  Task
+                </p>
+                <p className="mt-3 text-lg font-semibold leading-snug text-white">
+                  {run.task}
+                </p>
+              </div>
             </>
           ) : (
             <>
@@ -438,11 +477,11 @@ function RunSummaryCard({
           )}
         </div>
 
-        <div className="mt-8 grid grid-cols-2 gap-3">
+        <div className="mt-8 grid grid-cols-2 gap-3 xl:grid-cols-3">
           {runMeta ? (
             runMeta.map((item) => (
               <div
-                className="rounded-[15px] bg-white/10 p-4 ring-1 ring-white/10"
+                className="rounded-[6px] bg-[#1c1c1c] p-4 ring-1 ring-white/10"
                 key={item.label}
               >
                 <p className="text-xs text-zinc-500">{item.label}</p>
@@ -453,11 +492,11 @@ function RunSummaryCard({
             ))
           ) : (
             <>
-              <div className="rounded-[15px] bg-white/10 p-4 ring-1 ring-white/10">
+              <div className="rounded-[6px] bg-[#1c1c1c] p-4 ring-1 ring-white/10">
                 <p className="text-xs text-zinc-500">Workflow</p>
                 <p className="mt-2 text-sm font-medium text-white">5 agents</p>
               </div>
-              <div className="rounded-[15px] bg-white/10 p-4 ring-1 ring-white/10">
+              <div className="rounded-[6px] bg-[#1c1c1c] p-4 ring-1 ring-white/10">
                 <p className="text-xs text-zinc-500">Runner</p>
                 <p className="mt-2 text-sm font-medium text-white">
                   Gitclaw SDK
@@ -546,28 +585,25 @@ function AgentTimelineCard({
 
 function TechnicalLog({ agent, run }: { agent: AgentStep; run: RunResponse }) {
   if (agent.name === "Analyzer Agent") {
-    const lines = agent.details
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
+    const rows = parseGitStatusRows(agent.details);
 
     return (
       <div className="mt-3 rounded-[10px] bg-black/45 p-3 ring-1 ring-white/10">
         <p className="text-xs font-semibold uppercase text-zinc-500">
           Git status before run
         </p>
-        {lines.length ? (
+        {rows.length ? (
           <div className="mt-3 grid gap-2">
-            {lines.map((line) => (
+            {rows.map((row) => (
               <div
-                className="flex min-w-0 items-center gap-2 rounded-[8px] bg-white/5 px-3 py-2"
-                key={line}
+                className="grid min-w-0 grid-cols-[42px_minmax(0,1fr)] items-center gap-3 rounded-[8px] bg-white/5 px-3 py-2"
+                key={`${row.status}-${row.path}`}
               >
-                <span className="shrink-0 rounded-full bg-white/10 px-2 py-1 font-mono text-[11px] text-zinc-300">
-                  {line.slice(0, 2).trim() || "clean"}
+                <span className="inline-flex min-h-6 items-center justify-center rounded-[5px] bg-white/10 px-2 font-mono text-[11px] text-zinc-300">
+                  {row.status}
                 </span>
                 <span className="min-w-0 break-all font-mono text-xs text-zinc-300">
-                  {line.length > 3 ? line.slice(3) : line}
+                  {row.path}
                 </span>
               </div>
             ))}
@@ -626,6 +662,7 @@ function CoderTechnicalLog({
       </div>
 
       <LogSection title="Run setup" lines={sections.setup} />
+      <LogSection title="Repair loop" lines={sections.repair} />
       <LogSection title="Agent tool calls" lines={sections.tools} mono />
       <LogSection title="Assistant notes" lines={sections.assistant} />
       <LogSection title="Raw remainder" lines={sections.other} mono />
@@ -667,7 +704,7 @@ function LogSection({
 
 function ChangedFilesPanel({ run }: { run: RunResponse | null }) {
   return (
-    <Panel title="Changed Files" eyebrow="Patch surface">
+    <Panel title="Changed Files">
       {run ? (
         run.changed_files.length ? (
           <div className="grid gap-3">
@@ -714,35 +751,52 @@ function ChangedFilesPanel({ run }: { run: RunResponse | null }) {
 }
 
 function PrSummaryPanel({ run }: { run: RunResponse | null }) {
+  const reviewTitle = run ? getReviewTitle(run) : "";
+  const verificationText = run
+    ? `${run.tests.command} ${run.tests.status}`
+    : "";
+
   return (
-    <Panel title="PR Summary Panel" eyebrow="Ready for review">
+    <Panel title="PR Summary">
       {run ? (
-        <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
+        <div className="grid gap-5 lg:grid-cols-[0.92fr_1.08fr]">
           <div className="rounded-[15px] bg-white p-5 text-black">
-            <p className="text-xs font-medium uppercase text-zinc-500">
-              Review title
-            </p>
+            <p className="text-xs font-medium uppercase text-zinc-500">Title</p>
             <h2 className="mt-3 text-2xl font-semibold leading-tight">
-              {run.pr_summary.title}
+              {reviewTitle}
             </h2>
-            <div className="mt-5 flex flex-wrap gap-2">
-              <span className="rounded-full bg-black px-3 py-1.5 text-xs font-medium text-white">
-                {run.tests.command} {run.tests.status}
+            <div className="mt-5 grid gap-2 sm:grid-cols-2">
+              <span className="rounded-full bg-black px-3 py-2 text-center text-xs font-medium text-white">
+                {verificationText}
               </span>
-              <span className="rounded-full bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-700">
+              <span className="rounded-full bg-zinc-100 px-3 py-2 text-center text-xs font-medium text-zinc-700">
                 Human review required
               </span>
             </div>
           </div>
-          <div className="grid gap-3">
-            {run.pr_summary.body.map((item) => (
-              <div
-                className="rounded-[15px] bg-[#1c1c1c] p-4 text-sm leading-6 text-zinc-300 ring-1 ring-white/10"
-                key={item}
-              >
-                {item}
+          <div className="rounded-[15px] bg-[#1c1c1c] p-5 ring-1 ring-white/10">
+            <p className="text-xs font-medium uppercase text-zinc-500">
+              Review notes
+            </p>
+            <div className="mt-4 grid gap-3">
+              {run.pr_summary.body.map((item) => (
+                <div
+                  className="grid grid-cols-[8px_minmax(0,1fr)] gap-3 text-sm leading-6 text-zinc-300"
+                  key={item}
+                >
+                  <span className="mt-2 size-1.5 rounded-full bg-[#0099ff]" />
+                  <span>{item}</span>
+                </div>
+              ))}
+              <div className="grid grid-cols-[8px_minmax(0,1fr)] gap-3 text-sm leading-6 text-zinc-300">
+                <span className="mt-2 size-1.5 rounded-full bg-white" />
+                <span>No commit, push, or merge was performed automatically.</span>
               </div>
-            ))}
+            </div>
+            <div className="mt-5 rounded-[8px] bg-black/30 p-3 font-mono text-xs text-zinc-400 ring-1 ring-white/10">
+              {run.changed_files.length} changed file
+              {run.changed_files.length === 1 ? "" : "s"} ready for review
+            </div>
           </div>
         </div>
       ) : (
@@ -805,13 +859,23 @@ function MemoryColumn({
 function getAgentHighlights(agent: AgentStep, run: RunResponse) {
   if (agent.name === "Coder Agent") {
     const fileNames = run.changed_files.map((file) => file.path).join(", ");
-    return [
+    const highlights = [
       "SDK runner used with CLI disabled",
       `Changed ${run.changed_files.length} file${
         run.changed_files.length === 1 ? "" : "s"
       }`,
       fileNames ? `${fileNames} updated` : "No code changes captured",
     ];
+
+    if (/test repair/i.test(agent.details)) {
+      highlights.push(
+        run.tests.status === "passed"
+          ? "Pytest failed, repair passed"
+          : "Pytest repair attempted",
+      );
+    }
+
+    return highlights;
   }
 
   if (agent.name === "Tester Agent") {
@@ -835,9 +899,11 @@ function getAgentHighlights(agent: AgentStep, run: RunResponse) {
 
 function parseCoderLog(details: string) {
   const setup: string[] = [];
+  const repair: string[] = [];
   const tools: string[] = [];
   const assistant: string[] = [];
   const other: string[] = [];
+  let currentAttempt: "primary" | "repair" = "primary";
 
   for (const rawLine of details.split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -846,16 +912,40 @@ function parseCoderLog(details: string) {
     }
 
     if (
+      line.startsWith("BroPilot backend verification failed") ||
+      line.startsWith("Test repair") ||
+      line.startsWith("After repair")
+    ) {
+      repair.push(cleanLogLine(line));
+      continue;
+    }
+
+    if (line.startsWith("attempt: test-repair")) {
+      currentAttempt = "repair";
+      repair.push(cleanLogLine(line));
+      continue;
+    }
+
+    if (line.startsWith("attempt: primary")) {
+      currentAttempt = "primary";
+      setup.push(cleanLogLine(line));
+      continue;
+    }
+
+    if (
       line.startsWith("First Gitclaw") ||
       line.startsWith("Fallback") ||
-      line.startsWith("attempt:") ||
       line.startsWith("Temporary") ||
       line.startsWith("command:") ||
       line.startsWith("return_code:") ||
       line.startsWith("runner_status:") ||
       line.startsWith("system/")
     ) {
-      setup.push(cleanLogLine(line));
+      if (currentAttempt === "repair") {
+        repair.push(cleanLogLine(line));
+      } else {
+        setup.push(cleanLogLine(line));
+      }
       continue;
     }
 
@@ -881,6 +971,7 @@ function parseCoderLog(details: string) {
 
   return {
     setup,
+    repair,
     tools: tools.slice(0, 8),
     assistant: assistant.slice(0, 4),
     other: other.slice(0, 6),
@@ -888,11 +979,11 @@ function parseCoderLog(details: string) {
 }
 
 function cleanLogLine(line: string) {
-  return line
-    .replace(/\\n/g, " ")
-    .replace(/\s+/g, " ")
-    .replace(/\\"/g, '"')
-    .slice(0, 420);
+  const compacted = line.startsWith("command:")
+    ? line
+    : line.replace(/\\n/g, " ");
+
+  return compacted.replace(/\s+/g, " ").replace(/\\"/g, '"').slice(0, 420);
 }
 
 function parseTestSummary(run: RunResponse) {
@@ -914,7 +1005,7 @@ function parseTestSummary(run: RunResponse) {
   }
 
   if (/ERROR collecting/.test(log) || /error during collection/i.test(log)) {
-    const errorFile = log.match(/ERROR collecting ([^\r\n]+)/);
+    const errorFile = log.match(/ERROR collecting\s+([^\s]+)/);
     return {
       label: errorFile
         ? `Pytest collection failed in ${errorFile[1].trim()}.`
@@ -953,4 +1044,125 @@ function friendlyMemoryItems(items: string[]) {
       ? "No prior repo memory loaded for this run."
       : item,
   );
+}
+
+function parseGitStatusRows(details: string) {
+  return details
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+    .map((line) => {
+      if (line === "Working tree was clean.") {
+        return {
+          status: "clean",
+          path: line,
+        };
+      }
+
+      const status = line.slice(0, 2).trim() || "changed";
+      const path = line.slice(2).trim() || line.trim();
+
+      return {
+        status,
+        path,
+      };
+    });
+}
+
+function buildMemoryDisplay(memory: MemoryReport) {
+  const before = compactBeforeMemory(friendlyMemoryItems(memory.before));
+  const learnedRaw = uniqueItems(memory.learned);
+  const beforeKeys = new Set(before.map(normalizeMemoryKey));
+  const learnedNew = learnedRaw.filter(
+    (item) => !beforeKeys.has(normalizeMemoryKey(item)),
+  );
+  const used = compactUsedMemory(memory.used);
+
+  return {
+    before,
+    learned: learnedNew.length ? learnedNew : ["No new repo memory was added."],
+    used,
+  };
+}
+
+function compactUsedMemory(items: string[]) {
+  const unique = uniqueItems(items);
+  const operational = unique.filter(
+    (item) =>
+      item.includes("Loaded ") ||
+      item.includes("guardrails") ||
+      item.includes("Backend subprocess"),
+  );
+  const examples = unique
+    .filter((item) => !operational.includes(item))
+    .slice(0, 3)
+    .map((item) => `Memory hint: ${item}`);
+
+  return [...operational, ...examples];
+}
+
+function compactBeforeMemory(items: string[]) {
+  const unique = uniqueItems(items);
+  const verificationNotes = unique.filter((item) =>
+    item.startsWith("Last verification"),
+  );
+  const latestPassed =
+    verificationNotes.find((item) => item.includes("passed")) ?? null;
+  const latestVerification =
+    latestPassed ?? verificationNotes[verificationNotes.length - 1] ?? null;
+  const repoFacts = unique.filter((item) => !item.startsWith("Last verification"));
+
+  return latestVerification ? [...repoFacts, latestVerification] : repoFacts;
+}
+
+function uniqueItems(items: string[]) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const item of items) {
+    const cleaned = item.trim();
+    const key = normalizeMemoryKey(cleaned);
+
+    if (!cleaned || seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    result.push(cleaned);
+  }
+
+  return result;
+}
+
+function normalizeMemoryKey(item: string) {
+  return item.toLowerCase().replace(/\s+/g, " ");
+}
+
+function getReviewTitle(run: RunResponse) {
+  const title = run.pr_summary.title.trim();
+  const task = run.task.trim();
+
+  if (!title) {
+    return task || "BroPilot code changes";
+  }
+
+  if (task.startsWith(title) && title.length < task.length) {
+    return task;
+  }
+
+  return title;
+}
+
+function formatDateTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Not captured";
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
