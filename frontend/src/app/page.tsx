@@ -4,6 +4,7 @@ import type { FormEvent, ReactNode } from "react";
 import { useMemo, useState } from "react";
 
 const API_URL = "http://127.0.0.1:8000/api/runs/start";
+const REVIEW_API_URL = "http://127.0.0.1:8000/api/review/file-diff";
 const DEFAULT_REPO_PATH = "D:\\bropilot-demo";
 const DEFAULT_TASK = "";
 
@@ -479,7 +480,11 @@ export default function Home() {
         </section>
 
         <PrSummaryPanel run={run} />
-        <DiffViewer file={diffFile} onClose={() => setDiffFile(null)} />
+        <DiffViewer
+          file={diffFile}
+          onClose={() => setDiffFile(null)}
+          task={run?.task ?? ""}
+        />
       </div>
     </main>
   );
@@ -916,12 +921,67 @@ function PrSummaryPanel({ run }: { run: RunResponse | null }) {
 function DiffViewer({
   file,
   onClose,
+  task,
 }: {
   file: ChangedFile | null;
   onClose: () => void;
+  task: string;
 }) {
+  const [summaries, setSummaries] = useState<Record<string, string>>({});
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [loadingPath, setLoadingPath] = useState<string | null>(null);
+
   if (!file) {
     return null;
+  }
+
+  const reviewSummary = summaries[file.path];
+  const isReviewLoading = loadingPath === file.path;
+  const diff = buildLineDiff(
+    file.before_contents ?? "",
+    file.after_contents ?? "",
+  );
+
+  async function generateReviewSummary() {
+    if (!file) {
+      return;
+    }
+
+    setReviewError(null);
+    setLoadingPath(file.path);
+
+    try {
+      const response = await fetch(REVIEW_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          path: file.path,
+          task,
+          before_contents: file.before_contents ?? "",
+          after_contents: file.after_contents ?? "",
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.detail ?? "Review assistant failed.");
+      }
+
+      setSummaries((current) => ({
+        ...current,
+        [file.path]: payload.summary,
+      }));
+    } catch (error) {
+      setReviewError(
+        error instanceof Error
+          ? error.message
+          : "Review assistant failed.",
+      );
+    } finally {
+      setLoadingPath(null);
+    }
   }
 
   return (
@@ -936,23 +996,55 @@ function DiffViewer({
               {file.path}
             </h3>
           </div>
-          <button
-            className="rounded-[6px] bg-white/10 px-3 py-2 text-xs font-medium text-zinc-200 ring-1 ring-white/10 transition hover:bg-white/15 hover:text-white"
-            onClick={onClose}
-            type="button"
-          >
-            Close
-          </button>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <button
+              className="rounded-[6px] bg-[#071521] px-3 py-2 text-xs font-medium text-[#8fd0ff] ring-1 ring-[#0099ff]/30 transition hover:bg-[#0a2033] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isReviewLoading}
+              onClick={generateReviewSummary}
+              type="button"
+            >
+              {isReviewLoading
+                ? "Reviewing..."
+                : reviewSummary
+                  ? "Regenerate review"
+                  : "Review assistant"}
+            </button>
+            <button
+              className="rounded-[6px] bg-white/10 px-3 py-2 text-xs font-medium text-zinc-200 ring-1 ring-white/10 transition hover:bg-white/15 hover:text-white"
+              onClick={onClose}
+              type="button"
+            >
+              Close
+            </button>
+          </div>
         </div>
+
+        {reviewSummary || reviewError ? (
+          <div className="border-b border-white/10 bg-[#0c1217] px-4 py-3">
+            <p className="text-xs font-medium uppercase text-[#8fd0ff]">
+              Review Assistant
+            </p>
+            {reviewSummary ? (
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-zinc-200">
+                {reviewSummary}
+              </p>
+            ) : null}
+            {reviewError ? (
+              <p className="mt-2 text-sm leading-6 text-red-300">
+                {reviewError}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="grid min-h-0 flex-1 gap-px overflow-hidden bg-white/10 md:grid-cols-2">
           <CodePane
             label="Before HEAD"
-            lines={buildLineDiff(file.before_contents ?? "", file.after_contents ?? "").before}
+            lines={diff.before}
           />
           <CodePane
             label="After working tree"
-            lines={buildLineDiff(file.before_contents ?? "", file.after_contents ?? "").after}
+            lines={diff.after}
           />
         </div>
 
