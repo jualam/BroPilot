@@ -8,7 +8,7 @@ BroPilot does not auto-merge, auto-push, or bypass human review.
 
 ## Demo Video
 
-**Watch: [BroPilot - Safe Multi-Agent PR Builder with Gitclaw](https://youtu.be/8mkpRAtrorA)**
+**Watch: [BroPilot - Safe Multi-Agent PR Builder with Gitclaw](https://youtu.be/PWY4FT9odBE)**
 
 ## Repositories
 
