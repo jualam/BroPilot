@@ -66,19 +66,47 @@ const workflowMappings = [
   },
 ];
 
+function TopNav() {
+  return (
+    <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/90 backdrop-blur">
+      <nav className="mx-auto flex min-h-16 w-full max-w-7xl items-center justify-between gap-6 px-5 sm:px-8 lg:px-10">
+        <Link
+          aria-label="BroPilot Workbench home"
+          className="relative block h-[46px] w-[224px] shrink-0 overflow-hidden"
+          href="/"
+        >
+          <img
+            alt="BroPilot Workbench"
+            className="absolute -left-[52px] -top-[50px] h-auto w-[520px] max-w-none"
+            src="/bropilot-workbench-logo.svg"
+          />
+        </Link>
+        <div className="hidden items-center gap-1 text-sm text-zinc-600 md:flex">
+          <Link className="rounded-md px-3 py-2 transition hover:bg-zinc-100 hover:text-zinc-950" href="/">
+            Home
+          </Link>
+          <Link className="rounded-md px-3 py-2 transition hover:bg-zinc-100 hover:text-zinc-950" href="/code-pilot">
+            Code Pilot
+          </Link>
+          <Link className="rounded-md px-3 py-2 transition hover:bg-zinc-100 hover:text-zinc-950" href="/memo-pilot">
+            Memo Pilot
+          </Link>
+          <Link className="rounded-md px-3 py-2 transition hover:bg-zinc-100 hover:text-zinc-950" href="/ops-pilot">
+            Ops Pilot
+          </Link>
+          <Link className="rounded-md bg-zinc-100 px-3 py-2 text-zinc-950 transition hover:bg-zinc-100" href="/architecture">
+            Workflow Pattern
+          </Link>
+        </div>
+      </nav>
+    </header>
+  );
+}
+
 export default function ArchitecturePage() {
   return (
     <main className="min-h-screen bg-white text-zinc-950">
-      <header className="border-b border-zinc-200 bg-white">
-        <nav className="mx-auto flex min-h-16 w-full max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-10">
-          <Link className="text-sm font-semibold text-zinc-950" href="/">
-            BroPilot Workbench
-          </Link>
-          <Link className="text-sm font-medium text-zinc-600 hover:text-zinc-950" href="/code-pilot">
-            Open Code Pilot
-          </Link>
-        </nav>
-      </header>
+      <TopNav />
 
       <section className="mx-auto w-full max-w-7xl px-5 py-16 sm:px-8 lg:px-10">
         <div className="mx-auto max-w-6xl text-center">

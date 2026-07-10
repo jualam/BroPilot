@@ -65,6 +65,9 @@ function TopNav() {
           />
         </Link>
         <div className="hidden items-center gap-1 text-sm text-zinc-600 md:flex">
+          <Link className="rounded-md px-3 py-2 transition hover:bg-zinc-100 hover:text-zinc-950" href="/">
+            Home
+          </Link>
           <Link className="rounded-md px-3 py-2 transition hover:bg-zinc-100 hover:text-zinc-950" href="/code-pilot">
             Code Pilot
           </Link>
