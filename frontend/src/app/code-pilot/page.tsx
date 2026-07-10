@@ -72,21 +72,21 @@ type RunResponse = {
 };
 
 const statusTone: Record<string, string> = {
-  completed: "bg-emerald-400/10 text-emerald-300 ring-emerald-400/20",
-  passed: "bg-emerald-400/10 text-emerald-300 ring-emerald-400/20",
-  running: "bg-[#0099ff]/10 text-[#8fd0ff] ring-[#0099ff]/25",
-  failed: "bg-red-400/10 text-red-300 ring-red-400/20",
-  blocked: "bg-orange-400/10 text-orange-300 ring-orange-400/20",
-  needs_attention: "bg-amber-400/10 text-amber-200 ring-amber-400/25",
-  skipped: "bg-white/10 text-zinc-300 ring-white/15",
-  low: "bg-emerald-400/10 text-emerald-300 ring-emerald-400/20",
-  medium: "bg-amber-400/10 text-amber-200 ring-amber-400/25",
-  high: "bg-red-400/10 text-red-300 ring-red-400/20",
+  completed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  passed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  running: "bg-blue-50 text-blue-700 ring-blue-200",
+  failed: "bg-red-50 text-red-700 ring-red-200",
+  blocked: "bg-orange-50 text-orange-700 ring-orange-200",
+  needs_attention: "bg-amber-50 text-amber-700 ring-amber-200",
+  skipped: "bg-zinc-100 text-zinc-600 ring-zinc-200",
+  low: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  medium: "bg-amber-50 text-amber-700 ring-amber-200",
+  high: "bg-red-50 text-red-700 ring-red-200",
 };
 
 function getStatusTone(status: string) {
   return (
-    statusTone[status.toLowerCase()] ?? "bg-white/10 text-zinc-300 ring-white/15"
+    statusTone[status.toLowerCase()] ?? "bg-zinc-100 text-zinc-600 ring-zinc-200"
   );
 }
 
@@ -123,7 +123,7 @@ function StatusPill({ value }: { value: string }) {
 function ChevronIcon({ open }: { open: boolean }) {
   return (
     <span
-      className={`size-2.5 shrink-0 border-b border-r border-[#8fd0ff] transition-transform ${
+      className={`size-2.5 shrink-0 border-b border-r border-zinc-500 transition-transform ${
         open ? "rotate-[225deg]" : "rotate-45"
       }`}
     />
@@ -143,7 +143,7 @@ function Panel({
 }) {
   return (
     <section
-      className={`min-w-0 rounded-[10px] bg-[#141414] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.28)] ring-1 ring-white/10 ${className}`}
+      className={`min-w-0 rounded-lg border border-zinc-300 bg-zinc-100 p-5 shadow-[0_1px_1px_rgba(0,0,0,0.04),0_14px_40px_rgba(0,0,0,0.07)] ${className}`}
     >
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
@@ -152,7 +152,7 @@ function Panel({
               {eyebrow}
             </p>
           ) : null}
-          <h2 className="text-xl font-semibold text-white">{title}</h2>
+          <h2 className="text-xl font-semibold text-zinc-950">{title}</h2>
         </div>
       </div>
       {children}
@@ -162,7 +162,7 @@ function Panel({
 
 function EmptyPanel({ label }: { label: string }) {
   return (
-    <div className="rounded-[8px] border border-dashed border-white/10 bg-black/20 p-5 text-sm text-zinc-500">
+    <div className="rounded-md border border-dashed border-zinc-300 bg-zinc-50 p-5 text-sm text-zinc-500">
       {label}
     </div>
   );
@@ -170,28 +170,65 @@ function EmptyPanel({ label }: { label: string }) {
 
 function WorkflowSteps() {
   const steps = [
-    "Provide repository",
-    "Gitclaw SDK",
-    "Code changes",
-    "Pytest",
-    "Review summary",
+    "Repo context",
+    "Scoped plan",
+    "Constrained agent",
+    "Independent tests",
+    "Diff + PR summary",
   ];
 
   return (
-    <section className="rounded-[10px] bg-[#101010] p-4 ring-1 ring-[#0099ff]/20 shadow-[0_0_60px_rgba(0,153,255,0.08)]">
+    <section className="rounded-lg border border-zinc-300 bg-zinc-100 p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-center gap-2">
         {steps.map((step, index) => (
           <div className="flex items-center gap-2" key={step}>
-            <span className="rounded-[6px] bg-[#071521] px-3 py-2 text-xs font-medium text-[#8fd0ff] ring-1 ring-[#0099ff]/35 shadow-[0_0_24px_rgba(0,153,255,0.14)]">
+            <span className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-xs font-medium text-zinc-700">
               {step}
             </span>
             {index < steps.length - 1 ? (
-              <span className="text-xs text-[#0099ff]/60">-&gt;</span>
+              <span className="text-xs text-zinc-700">-&gt;</span>
             ) : null}
           </div>
         ))}
       </div>
     </section>
+  );
+}
+
+function TopNav() {
+  return (
+    <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/90 backdrop-blur">
+      <nav className="mx-auto flex min-h-16 w-full max-w-7xl items-center justify-between gap-6 px-5 sm:px-8 lg:px-10">
+        <a
+          aria-label="BroPilot Workbench home"
+          className="relative block h-[46px] w-[224px] shrink-0 overflow-hidden"
+          href="/"
+        >
+          <img
+            alt="BroPilot Workbench"
+            className="absolute -left-[52px] -top-[50px] h-auto w-[520px] max-w-none"
+            src="/bropilot-workbench-logo.svg"
+          />
+        </a>
+        <div className="hidden items-center gap-1 text-sm text-zinc-600 md:flex">
+          <a className="rounded-md px-3 py-2 transition hover:bg-zinc-100 hover:text-zinc-950" href="/">
+            Home
+          </a>
+          <a className="rounded-md bg-zinc-100 px-3 py-2 text-zinc-950 transition hover:bg-zinc-100" href="/code-pilot">
+            Code Pilot
+          </a>
+          <a className="rounded-md px-3 py-2 transition hover:bg-zinc-100 hover:text-zinc-950" href="/memo-pilot">
+            Memo Pilot
+          </a>
+          <a className="rounded-md px-3 py-2 transition hover:bg-zinc-100 hover:text-zinc-950" href="/ops-pilot">
+            Ops Pilot
+          </a>
+          <a className="rounded-md px-3 py-2 transition hover:bg-zinc-100 hover:text-zinc-950" href="/architecture">
+            Workflow Pattern
+          </a>
+        </div>
+      </nav>
+    </header>
   );
 }
 
@@ -270,44 +307,32 @@ export default function Home() {
   const testSummary = run ? parseTestSummary(run) : null;
 
   return (
-    <main className="min-h-screen bg-[#090909] text-white">
+    <main className="min-h-screen bg-white text-zinc-950">
+      <TopNav />
       <div className="mx-auto flex w-full max-w-[1199px] flex-col gap-6 px-5 py-6 sm:px-8 lg:px-10">
-        <header className="flex min-h-14 items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="grid size-10 place-items-center rounded-full bg-white text-sm font-bold text-black">
-              BP
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-white">BroPilot</p>
-              <p className="text-xs text-zinc-500">Safe PR builder</p>
-            </div>
-          </div>
-          <div className="hidden items-center gap-2 rounded-full bg-[#141414] px-4 py-2 text-xs text-zinc-300 ring-1 ring-white/10 sm:flex">
-            <span className="size-2 rounded-full bg-emerald-400 shadow-[0_0_16px_rgba(52,211,153,0.8)]" />
-            SDK runner connected
-          </div>
-        </header>
 
         <section className="mx-auto max-w-3xl py-4 text-center">
-          <h1 className="bg-[linear-gradient(90deg,#ffffff_0%,#0099ff_34%,#ffffff_58%,#d44df0_82%,#ff7a3d_100%)] bg-clip-text text-5xl font-semibold leading-none text-transparent drop-shadow-[0_0_42px_rgba(0,153,255,0.38)] sm:text-6xl lg:text-7xl">
-            BroPilot
+          <h1 className="text-5xl font-semibold leading-none tracking-tight text-zinc-950 sm:text-6xl lg:text-7xl">
+            Code Pilot
           </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-lg leading-7 text-zinc-400 sm:text-xl">
-            Your repo&apos;s AI teammate for safe, reviewable code changes.
+          <p className="mx-auto mt-5 max-w-2xl text-lg leading-7 text-zinc-600 sm:text-xl">
+            Turn an engineering task into a review-ready code change with
+            scoped context, constrained execution, tests, diffs, safety checks,
+            and a PR summary.
           </p>
         </section>
 
         <WorkflowSteps />
 
         <section className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.06fr)_minmax(380px,0.94fr)]">
-          <div className="min-w-0 rounded-[10px] bg-[#141414] p-6 ring-1 ring-white/10 sm:p-8">
+          <div className="min-w-0 rounded-lg border border-zinc-300 bg-zinc-100 p-6 shadow-[0_1px_1px_rgba(0,0,0,0.04),0_14px_40px_rgba(0,0,0,0.07)] sm:p-8">
             <form className="grid gap-4" onSubmit={startRun}>
               <label className="grid gap-2">
-                <span className="text-sm font-medium text-zinc-300">
+                <span className="text-sm font-medium text-zinc-700">
                   Repo path
                 </span>
                 <input
-                  className="min-h-12 rounded-[10px] bg-[#1c1c1c] px-4 text-sm text-white outline-none ring-1 ring-white/10 transition focus:ring-[#0099ff]/70"
+                  className="min-h-12 rounded-md border border-zinc-300 bg-white px-4 text-sm text-zinc-950 outline-none transition focus:border-zinc-500"
                   value={repoPath}
                   onChange={(event) => setRepoPath(event.target.value)}
                   placeholder="D:\\bropilot-demo"
@@ -316,26 +341,26 @@ export default function Home() {
               </label>
 
               <label className="grid gap-2">
-                <span className="text-sm font-medium text-zinc-300">Task</span>
+                <span className="text-sm font-medium text-zinc-700">Task</span>
                 <textarea
-                  className="min-h-32 resize-y rounded-[10px] bg-[#1c1c1c] px-4 py-3 text-sm leading-6 text-white outline-none ring-1 ring-white/10 transition focus:ring-[#0099ff]/70"
+                  className="min-h-32 resize-y rounded-md border border-zinc-300 bg-white px-4 py-3 text-sm leading-6 text-zinc-950 outline-none transition focus:border-zinc-500"
                   value={task}
                   onChange={(event) => setTask(event.target.value)}
-                  placeholder="Describe the code change BroPilot should prepare"
+                  placeholder="Describe the code change Code Pilot should prepare"
                   required
                 />
               </label>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <button
-                  className="inline-flex min-h-11 items-center justify-center rounded-full bg-white px-4 text-sm font-semibold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:bg-zinc-500 disabled:text-zinc-900"
+                  className="inline-flex min-h-11 items-center justify-center rounded-md bg-zinc-950 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-500"
                   disabled={isLoading}
                   type="submit"
                 >
-                  {isLoading ? "Running BroPilot..." : "Run BroPilot"}
+                  {isLoading ? "Running Code Pilot..." : "Run Code Pilot"}
                 </button>
                 {error ? (
-                  <p className="rounded-[10px] bg-red-400/10 px-4 py-3 text-sm text-red-200 ring-1 ring-red-400/20">
+                  <p className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                     {error}
                   </p>
                 ) : null}
@@ -372,20 +397,20 @@ export default function Home() {
           <ChangedFilesPanel run={run} onOpenDiff={setDiffFile} />
           <Panel title="Test Results">
             {run && testSummary ? (
-              <div className="rounded-[8px] bg-[#1c1c1c] p-4 ring-1 ring-white/10">
+              <div className="rounded-[8px] border border-zinc-300 bg-white p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-white">
+                    <p className="text-sm font-semibold text-zinc-950">
                       {run.tests.command} {run.tests.status}
                     </p>
-                    <p className="mt-2 text-sm text-zinc-400">
+                    <p className="mt-2 text-sm text-zinc-600">
                       {testSummary.label}
                     </p>
                   </div>
                   <StatusPill value={run.tests.status} />
                 </div>
                 <button
-                  className="mt-4 inline-flex items-center gap-2 rounded-[6px] bg-black/30 px-3 py-2 text-xs font-medium text-zinc-300 ring-1 ring-white/10 transition hover:text-white"
+                  className="mt-4 inline-flex items-center gap-2 rounded-[6px] bg-zinc-100 px-3 py-2 text-xs font-medium text-zinc-700 border border-zinc-200 transition hover:text-zinc-950"
                   onClick={() => setShowTestLog((current) => !current)}
                   type="button"
                 >
@@ -393,7 +418,7 @@ export default function Home() {
                   <ChevronIcon open={showTestLog} />
                 </button>
                 {showTestLog ? (
-                  <pre className="mt-3 max-h-56 w-full max-w-full overflow-auto whitespace-pre-wrap break-words rounded-[10px] bg-black/45 p-3 font-mono text-xs leading-5 text-zinc-300 ring-1 ring-white/10">
+                  <pre className="mt-3 max-h-56 w-full max-w-full overflow-auto whitespace-pre-wrap break-words rounded-[10px] bg-zinc-100 p-3 font-mono text-xs leading-5 text-zinc-700 border border-zinc-200">
                     {getTesterLog(run)}
                   </pre>
                 ) : null}
@@ -408,14 +433,14 @@ export default function Home() {
           <Panel title="Safety Panel">
             {run ? (
               <div className="grid gap-4">
-                <div className="rounded-[8px] bg-[#1c1c1c] p-4 ring-1 ring-white/10">
+                <div className="rounded-[8px] border border-zinc-300 bg-white p-4">
                   <div className="flex flex-wrap items-center gap-3">
-                    <p className="text-sm font-semibold text-white">
+                    <p className="text-sm font-semibold text-zinc-950">
                       Review signal
                     </p>
                     <StatusPill value={run.safety.risk_score} />
                   </div>
-                  <p className="mt-3 text-sm leading-6 text-zinc-300">
+                  <p className="mt-3 text-sm leading-6 text-zinc-700">
                     {run.safety.risk_reason ??
                       getRiskExplanation(run.safety.risk_score)}
                   </p>
@@ -423,13 +448,13 @@ export default function Home() {
                 <div className="grid gap-3">
                   {run.safety.blocked_actions.map((action) => (
                     <article
-                      className="rounded-[8px] bg-[#1c1c1c] p-4 ring-1 ring-white/10"
+                      className="rounded-[8px] border border-zinc-300 bg-white p-4"
                       key={action.command}
                     >
-                      <p className="text-sm font-semibold text-white">
+                      <p className="text-sm font-semibold text-zinc-950">
                         {action.command}
                       </p>
-                      <p className="mt-3 text-sm leading-6 text-zinc-300">
+                      <p className="mt-3 text-sm leading-6 text-zinc-700">
                         {action.reason}
                       </p>
                     </article>
@@ -453,7 +478,7 @@ export default function Home() {
                     <>
                       <MemoryColumn
                         title="Before this run"
-                        description="Curated repo facts BroPilot already had."
+                        description="Curated repo facts Code Pilot already had."
                         items={memory.before}
                         expandedItems={memory.beforeAll}
                         expandedLabel="Show all memory"
@@ -474,7 +499,7 @@ export default function Home() {
                 })()}
               </div>
             ) : (
-              <EmptyPanel label="BroPilot memory will grow from each reviewed run." />
+              <EmptyPanel label="Code Pilot memory will grow from each reviewed run." />
             )}
           </Panel>
         </section>
@@ -498,38 +523,38 @@ function RunSummaryCard({
   runMeta: { label: string; value: string }[] | null;
 }) {
   return (
-    <div className="min-w-0 rounded-[10px] bg-[#141414] p-6 ring-1 ring-white/10 sm:p-8">
+    <div className="min-w-0 rounded-lg border border-zinc-300 bg-zinc-100 p-6 shadow-[0_1px_1px_rgba(0,0,0,0.04),0_14px_40px_rgba(0,0,0,0.07)] sm:p-8">
       <div className="flex h-full flex-col justify-between">
         <div>
-          <p className="mb-4 text-sm font-medium text-zinc-300">Current run</p>
+          <p className="mb-4 text-sm font-medium text-zinc-600">Current run</p>
           {run ? (
             <>
               <div className="mb-4 flex flex-wrap items-center gap-2">
                 <StatusPill value={run.status} />
-                <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs text-zinc-300 ring-1 ring-white/10">
+                <span className="rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-600">
                   CLI disabled
                 </span>
-                <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs text-zinc-300 ring-1 ring-white/10">
+                <span className="rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-600">
                   Human review required
                 </span>
               </div>
-              <div className="rounded-[8px] bg-white/10 p-4 ring-1 ring-white/10">
+              <div className="rounded-md border border-zinc-300 bg-white p-4">
                 <p className="text-xs font-medium uppercase text-zinc-500">
                   Task
                 </p>
-                <p className="mt-3 text-sm font-medium leading-6 text-zinc-200">
+                <p className="mt-3 text-sm font-medium leading-6 text-zinc-700">
                   {run.task}
                 </p>
               </div>
             </>
           ) : (
             <>
-              <h2 className="text-3xl font-semibold leading-tight text-white">
-                Ready to launch the flight recorder.
+              <h2 className="text-3xl font-semibold leading-tight text-zinc-950">
+                Ready to launch Code Pilot.
               </h2>
-              <p className="mt-4 text-sm leading-6 text-zinc-400">
-                Submit the demo task to watch Gitclaw edit, BroPilot verify, and
-                the dashboard package the result for review.
+              <p className="mt-4 text-sm leading-6 text-zinc-600">
+                Submit an engineering task to watch the agent edit, Code Pilot
+                verify, and the dashboard package the result for review.
               </p>
             </>
           )}
@@ -539,24 +564,24 @@ function RunSummaryCard({
           {runMeta ? (
             runMeta.map((item) => (
               <div
-                className="rounded-[6px] bg-[#1c1c1c] p-4 ring-1 ring-white/10"
+                className="rounded-md border border-zinc-300 bg-white p-4"
                 key={item.label}
               >
                 <p className="text-xs text-zinc-500">{item.label}</p>
-                <p className="mt-2 break-words text-sm font-medium text-white">
+                <p className="mt-2 break-words text-sm font-medium text-zinc-950">
                   {item.value}
                 </p>
               </div>
             ))
           ) : (
             <>
-              <div className="rounded-[6px] bg-[#1c1c1c] p-4 ring-1 ring-white/10">
+              <div className="rounded-md border border-zinc-300 bg-white p-4">
                 <p className="text-xs text-zinc-500">Workflow</p>
-                <p className="mt-2 text-sm font-medium text-white">5 agents</p>
+                <p className="mt-2 text-sm font-medium text-zinc-950">5 agents</p>
               </div>
-              <div className="rounded-[6px] bg-[#1c1c1c] p-4 ring-1 ring-white/10">
+              <div className="rounded-md border border-zinc-300 bg-white p-4">
                 <p className="text-xs text-zinc-500">Runner</p>
-                <p className="mt-2 text-sm font-medium text-white">
+                <p className="mt-2 text-sm font-medium text-zinc-950">
                   Gitclaw SDK
                 </p>
               </div>
@@ -595,14 +620,14 @@ function AgentTimelineCard({
           {index + 1}
         </div>
         {!isLast ? (
-          <div className="hidden h-full min-h-12 w-px bg-white/10 sm:block" />
+          <div className="hidden h-full min-h-12 w-px bg-zinc-100 sm:block" />
         ) : null}
       </div>
-      <article className="min-w-0 rounded-[8px] bg-[#1c1c1c] p-4 ring-1 ring-white/10">
+      <article className="min-w-0 rounded-[8px] border border-zinc-300 bg-white p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h3 className="text-base font-semibold text-white">{agent.name}</h3>
-            <p className="mt-2 text-sm leading-6 text-zinc-400">
+            <h3 className="text-base font-semibold text-zinc-950">{agent.name}</h3>
+            <p className="mt-2 text-sm leading-6 text-zinc-600">
               {displaySummary}
             </p>
           </div>
@@ -613,7 +638,7 @@ function AgentTimelineCard({
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             {highlights.map((highlight) => (
               <div
-                className="rounded-[6px] bg-black/25 px-3 py-2 text-sm text-zinc-300 ring-1 ring-white/10"
+                className="rounded-[6px] bg-zinc-100 px-3 py-2 text-sm text-zinc-700 border border-zinc-200"
                 key={highlight}
               >
                 {highlight}
@@ -625,7 +650,7 @@ function AgentTimelineCard({
         {hasTechnicalLog ? (
           <>
             <button
-              className="mt-4 inline-flex items-center gap-2 rounded-[6px] bg-black/30 px-3 py-2 text-xs font-medium text-zinc-300 ring-1 ring-white/10 transition hover:text-white"
+              className="mt-4 inline-flex items-center gap-2 rounded-[6px] bg-zinc-100 px-3 py-2 text-xs font-medium text-zinc-700 border border-zinc-200 transition hover:text-zinc-950"
               onClick={toggleLog}
               type="button"
             >
@@ -647,7 +672,7 @@ function TechnicalLog({ agent, run }: { agent: AgentStep; run: RunResponse }) {
     const rows = parseGitStatusRows(agent.details);
 
     return (
-      <div className="mt-3 rounded-[10px] bg-black/45 p-3 ring-1 ring-white/10">
+      <div className="mt-3 rounded-[10px] bg-zinc-100 p-3 border border-zinc-200">
         <p className="text-xs font-semibold uppercase text-zinc-500">
           Git status before run
         </p>
@@ -658,17 +683,17 @@ function TechnicalLog({ agent, run }: { agent: AgentStep; run: RunResponse }) {
                 className="grid min-w-0 grid-cols-[42px_minmax(0,1fr)] items-center gap-3 rounded-[8px] bg-white/5 px-3 py-2"
                 key={`${row.status}-${row.path}`}
               >
-                <span className="inline-flex min-h-6 items-center justify-center rounded-[5px] bg-white/10 px-2 font-mono text-[11px] text-zinc-300">
+                <span className="inline-flex min-h-6 items-center justify-center rounded-[5px] bg-zinc-100 px-2 font-mono text-[11px] text-zinc-700">
                   {row.status}
                 </span>
-                <span className="min-w-0 break-all font-mono text-xs text-zinc-300">
+                <span className="min-w-0 break-all font-mono text-xs text-zinc-700">
                   {row.path}
                 </span>
               </div>
             ))}
           </div>
         ) : (
-          <p className="mt-3 text-sm text-zinc-300">Working tree was clean.</p>
+          <p className="mt-3 text-sm text-zinc-700">Working tree was clean.</p>
         )}
       </div>
     );
@@ -679,7 +704,7 @@ function TechnicalLog({ agent, run }: { agent: AgentStep; run: RunResponse }) {
   }
 
   return (
-    <pre className="mt-3 max-h-64 w-full max-w-full overflow-auto whitespace-pre-wrap break-words rounded-[10px] bg-black/45 p-3 font-mono text-xs leading-5 text-zinc-300 ring-1 ring-white/10">
+    <pre className="mt-3 max-h-64 w-full max-w-full overflow-auto whitespace-pre-wrap break-words rounded-[10px] bg-zinc-100 p-3 font-mono text-xs leading-5 text-zinc-700 border border-zinc-200">
       {agent.details}
     </pre>
   );
@@ -695,7 +720,7 @@ function CoderTechnicalLog({
   const sections = parseCoderLog(details);
 
   return (
-    <div className="mt-3 grid gap-3 rounded-[10px] bg-black/45 p-3 ring-1 ring-white/10">
+    <div className="mt-3 grid gap-3 rounded-[10px] bg-zinc-100 p-3 border border-zinc-200">
       <div>
         <p className="text-xs font-semibold uppercase text-zinc-500">
           Code changes
@@ -706,7 +731,7 @@ function CoderTechnicalLog({
               className="flex min-w-0 flex-wrap items-center gap-2 rounded-[8px] bg-white/5 px-3 py-2"
               key={file.path}
             >
-              <span className="min-w-0 break-all font-mono text-xs font-semibold text-white">
+              <span className="min-w-0 break-all font-mono text-xs font-semibold text-zinc-950">
                 {file.path}
               </span>
               <span className="rounded-full bg-emerald-400/10 px-2 py-1 text-[11px] text-emerald-300">
@@ -748,7 +773,7 @@ function LogSection({
       <div className="mt-2 grid gap-2">
         {lines.map((line, index) => (
           <div
-            className={`min-w-0 rounded-[8px] bg-white/5 px-3 py-2 text-xs leading-5 text-zinc-300 ${
+            className={`min-w-0 rounded-[8px] bg-white/5 px-3 py-2 text-xs leading-5 text-zinc-700 ${
               mono ? "font-mono" : ""
             }`}
             key={`${title}-${index}`}
@@ -775,15 +800,15 @@ function ChangedFilesPanel({
           <div className="grid gap-3">
             {run.changed_files.map((file) => (
               <article
-                className="rounded-[8px] bg-[#1c1c1c] p-4 ring-1 ring-white/10"
+                className="rounded-[8px] border border-zinc-300 bg-white p-4"
                 key={file.path}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="break-all font-mono text-sm text-white">
+                    <p className="break-all font-mono text-sm text-zinc-950">
                       {file.path}
                     </p>
-                    <p className="mt-2 text-sm leading-6 text-zinc-400">
+                    <p className="mt-2 text-sm leading-6 text-zinc-600">
                       {file.summary}
                     </p>
                   </div>
@@ -802,7 +827,7 @@ function ChangedFilesPanel({
                     </span>
                   ) : null}
                   <button
-                    className="ml-auto rounded-[6px] bg-[#071521] px-3 py-1.5 text-xs font-medium text-[#8fd0ff] ring-1 ring-[#0099ff]/30 transition hover:bg-[#0a2033] hover:text-white"
+                    className="ml-auto rounded-[6px] bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-700 ring-1 ring-zinc-200 transition hover:bg-zinc-100 hover:text-zinc-950"
                     onClick={() => onOpenDiff(file)}
                     type="button"
                   >
@@ -848,71 +873,71 @@ function PrSummaryPanel({ run }: { run: RunResponse | null }) {
     <Panel title="PR Summary">
       {run ? (
         <div className="grid gap-5 lg:grid-cols-[0.92fr_1.08fr]">
-          <div className="rounded-[8px] bg-[#1c1c1c] p-5 text-white ring-1 ring-white/10">
+          <div className="rounded-[8px] border border-zinc-300 bg-white p-5 text-zinc-950">
             <p className="text-xs font-medium uppercase text-zinc-500">
               Given task
             </p>
-            <h2 className="mt-3 text-lg font-semibold leading-snug text-white">
+            <h2 className="mt-3 text-lg font-semibold leading-snug text-zinc-950">
               {reviewTitle}
             </h2>
             <div className="mt-5 grid gap-2 sm:grid-cols-2">
               <span className="rounded-[6px] bg-emerald-400/10 px-3 py-2 text-center text-xs font-medium text-emerald-300 ring-1 ring-emerald-400/20">
                 {verificationText}
               </span>
-              <span className="rounded-[6px] bg-white/10 px-3 py-2 text-center text-xs font-medium text-zinc-200 ring-1 ring-white/10">
+              <span className="rounded-[6px] bg-zinc-100 px-3 py-2 text-center text-xs font-medium text-zinc-700 border border-zinc-200">
                 Human review required
               </span>
             </div>
           </div>
-          <div className="rounded-[8px] bg-[#1c1c1c] p-5 ring-1 ring-white/10">
+          <div className="rounded-[8px] border border-zinc-300 bg-white p-5">
             <p className="text-xs font-medium uppercase text-zinc-500">
               Review notes
             </p>
             <div className="mt-4 grid gap-3">
               {run.pr_summary.body.map((item) => (
                 <div
-                  className="grid grid-cols-[8px_minmax(0,1fr)] gap-3 text-sm leading-6 text-zinc-300"
+                  className="grid grid-cols-[8px_minmax(0,1fr)] gap-3 text-sm leading-6 text-zinc-700"
                   key={item}
                 >
                   <span className="mt-2 size-1.5 rounded-full bg-[#0099ff]" />
                   <span>{item}</span>
                 </div>
               ))}
-              <div className="grid grid-cols-[8px_minmax(0,1fr)] gap-3 text-sm leading-6 text-zinc-300">
+              <div className="grid grid-cols-[8px_minmax(0,1fr)] gap-3 text-sm leading-6 text-zinc-700">
                 <span className="mt-2 size-1.5 rounded-full bg-white" />
                 <span>No commit, push, or merge was performed automatically.</span>
               </div>
             </div>
-            <div className="mt-5 rounded-[8px] bg-black/30 p-3 font-mono text-xs text-zinc-400 ring-1 ring-white/10">
+            <div className="mt-5 rounded-[8px] bg-zinc-100 p-3 font-mono text-xs text-zinc-600 border border-zinc-200">
               {run.changed_files.length} changed file
               {run.changed_files.length === 1 ? "" : "s"} ready for review
             </div>
           </div>
-          <div className="lg:col-span-2 rounded-[8px] bg-[#101010] p-5 ring-1 ring-white/10">
+          <div className="lg:col-span-2 rounded-[8px] border border-zinc-200 bg-white p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-medium uppercase text-zinc-500">
                   Copy-ready markdown
                 </p>
-                <p className="mt-2 text-sm text-zinc-300">
+                <p className="mt-2 text-sm text-zinc-700">
                   Prepared for a draft PR body or review comment.
                 </p>
               </div>
               <button
-                className="rounded-[6px] bg-[#071521] px-4 py-2 text-xs font-medium text-[#8fd0ff] ring-1 ring-[#0099ff]/30 transition hover:bg-[#0a2033] hover:text-white"
+                className="rounded-[6px] bg-zinc-100 px-4 py-2 text-xs font-medium text-zinc-700 ring-1 ring-zinc-200 transition hover:bg-zinc-100 hover:text-zinc-950"
                 onClick={copyMarkdown}
                 type="button"
               >
                 {copied ? "Copied" : "Copy markdown"}
               </button>
             </div>
-            <pre className="mt-4 max-h-56 overflow-auto whitespace-pre-wrap rounded-[6px] bg-black/35 p-4 font-mono text-xs leading-5 text-zinc-300 ring-1 ring-white/10">
+            <pre className="mt-4 max-h-56 overflow-auto whitespace-pre-wrap rounded-[6px] bg-zinc-100 p-4 font-mono text-xs leading-5 text-zinc-700 border border-zinc-200">
               {markdown}
             </pre>
           </div>
         </div>
       ) : (
-        <EmptyPanel label="The generated PR title and summary will be shown after BroPilot completes." />
+        <EmptyPanel label="The generated PR title and summary will be shown after Code Pilot completes." />
       )}
     </Panel>
   );
@@ -992,13 +1017,13 @@ function DiffViewer({
             <p className="text-xs font-medium uppercase text-zinc-500">
               File diff
             </p>
-            <h3 className="mt-2 break-all font-mono text-base font-semibold text-white">
+            <h3 className="mt-2 break-all font-mono text-base font-semibold text-zinc-950">
               {file.path}
             </h3>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             <button
-              className="rounded-[6px] bg-[#071521] px-3 py-2 text-xs font-medium text-[#8fd0ff] ring-1 ring-[#0099ff]/30 transition hover:bg-[#0a2033] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-[6px] bg-zinc-100 px-3 py-2 text-xs font-medium text-zinc-700 ring-1 ring-zinc-200 transition hover:bg-zinc-100 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={isReviewLoading}
               onClick={generateReviewSummary}
               type="button"
@@ -1010,7 +1035,7 @@ function DiffViewer({
                   : "Review assistant"}
             </button>
             <button
-              className="rounded-[6px] bg-white/10 px-3 py-2 text-xs font-medium text-zinc-200 ring-1 ring-white/10 transition hover:bg-white/15 hover:text-white"
+              className="rounded-[6px] bg-zinc-100 px-3 py-2 text-xs font-medium text-zinc-700 border border-zinc-200 transition hover:bg-white/15 hover:text-zinc-950"
               onClick={onClose}
               type="button"
             >
@@ -1021,11 +1046,11 @@ function DiffViewer({
 
         {reviewSummary || reviewError ? (
           <div className="border-b border-white/10 bg-[#0c1217] px-4 py-3">
-            <p className="text-xs font-medium uppercase text-[#8fd0ff]">
+            <p className="text-xs font-medium uppercase text-zinc-700">
               Review Assistant
             </p>
             {reviewSummary ? (
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-zinc-200">
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-zinc-700">
                 {reviewSummary}
               </p>
             ) : null}
@@ -1037,7 +1062,7 @@ function DiffViewer({
           </div>
         ) : null}
 
-        <div className="grid min-h-0 flex-1 gap-px overflow-hidden bg-white/10 md:grid-cols-2">
+        <div className="grid min-h-0 flex-1 gap-px overflow-hidden bg-zinc-100 md:grid-cols-2">
           <CodePane
             label="Before HEAD"
             lines={diff.before}
@@ -1220,7 +1245,7 @@ function diffLineTone(type: DiffLineType) {
     return "bg-black/20 text-zinc-700";
   }
 
-  return "text-zinc-300";
+  return "text-zinc-700";
 }
 
 function MemoryColumn({
@@ -1246,14 +1271,14 @@ function MemoryColumn({
     <article
       className={`rounded-[4px] p-4 ring-1 ${
         featured
-          ? "bg-[#1c1c1c] text-white ring-[#0099ff]/25"
-          : "bg-[#1c1c1c] text-white ring-white/10"
+          ? "border border-zinc-300 bg-white text-zinc-950"
+          : "border border-zinc-200 bg-zinc-50 text-zinc-950"
       }`}
     >
-      <h3 className="text-base font-semibold text-white">
+      <h3 className="text-base font-semibold text-zinc-950">
         {title}
       </h3>
-      <p className="mt-1 text-xs leading-5 text-zinc-400">{description}</p>
+      <p className="mt-1 text-xs leading-5 text-zinc-600">{description}</p>
       {items.length > 0 ? (
         <>
           <ul className="mt-4 grid gap-3">
@@ -1268,7 +1293,7 @@ function MemoryColumn({
           </ul>
           {canExpand ? (
             <button
-              className="mt-4 inline-flex items-center gap-2 rounded-[5px] bg-black/25 px-3 py-2 text-xs font-medium text-[#9fd7ff] ring-1 ring-[#0099ff]/20 transition hover:bg-[#0099ff]/10 hover:text-white"
+              className="mt-4 inline-flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 hover:text-zinc-950"
               onClick={() => setExpanded((current) => !current)}
               type="button"
             >
@@ -1279,7 +1304,7 @@ function MemoryColumn({
         </>
       ) : (
         <p
-          className="mt-4 text-sm leading-6 text-zinc-300"
+          className="mt-4 text-sm leading-6 text-zinc-700"
         >
           No memory used on this run.
         </p>
@@ -1585,7 +1610,7 @@ function getReviewTitle(run: RunResponse) {
   const task = run.task.trim();
 
   if (!title) {
-    return task || "BroPilot code changes";
+    return task || "Code Pilot code changes";
   }
 
   if (task.startsWith(title) && title.length < task.length) {
@@ -1628,3 +1653,7 @@ function formatDateTime(value: string) {
     minute: "2-digit",
   }).format(date);
 }
+
+
+
+
