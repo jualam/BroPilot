@@ -4,9 +4,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.services.git_service import GitSnapshot
-from app.services.gitclaw_service import (
-    CommandResult,
-    GITCLAW_GUARDRAILS,
+from app.services.openai_agent_service import (
+    AgentRunResult,
+    OPENAI_AGENT_GUARDRAILS,
     is_read_only_task,
 )
 from app.services.test_runner import TestRunResult
@@ -19,39 +19,39 @@ def build_success_or_failure_run(
     task: str,
     started_at: str,
     git_before: GitSnapshot,
-    gitclaw_result: CommandResult,
-    fallback_gitclaw_result: CommandResult | None,
-    repair_gitclaw_result: CommandResult | None,
+    agent_result: AgentRunResult,
+    fallback_agent_result: AgentRunResult | None,
+    repair_agent_result: AgentRunResult | None,
     first_changed_count: int,
     test_result: TestRunResult,
-    git_after_gitclaw: GitSnapshot,
+    git_after_agent: GitSnapshot,
     git_after: GitSnapshot,
     memory_before: list[str] | None = None,
     memory_learned: list[str] | None = None,
 ) -> dict:
     completed_at = _now()
-    final_gitclaw_result = (
-        repair_gitclaw_result or fallback_gitclaw_result or gitclaw_result
+    final_agent_result = (
+        repair_agent_result or fallback_agent_result or agent_result
     )
     tests_passed = test_result.return_code == 0
-    gitclaw_passed = final_gitclaw_result.return_code == 0
+    agent_passed = final_agent_result.return_code == 0
     git_ok = git_after.status.return_code == 0
-    changed_files = git_after_gitclaw.changed_files
+    changed_files = git_after_agent.changed_files
     changed_count = len(changed_files)
     memory_before = memory_before or []
     memory_learned = memory_learned or []
-    memory_used = gitclaw_result.memory_used
+    memory_used = agent_result.memory_used
     no_code_changes = (
-        gitclaw_passed and changed_count == 0 and not is_read_only_task(task)
+        agent_passed and changed_count == 0 and not is_read_only_task(task)
     )
     safety_actions = _safety_actions(task, changed_files)
     has_safety_warnings = any(
         action["command"] != "Protected paths guarded" for action in safety_actions
     )
 
-    if no_code_changes and gitclaw_passed and git_ok:
+    if no_code_changes and agent_passed and git_ok:
         status = "needs_attention"
-    elif gitclaw_passed and tests_passed and git_ok:
+    elif agent_passed and tests_passed and git_ok:
         status = "completed"
     else:
         status = "failed"
@@ -65,17 +65,17 @@ def build_success_or_failure_run(
         "completed_at": completed_at,
         "agents": [
             _analyzer_agent(git_before),
-            _planner_agent(task, gitclaw_result.preloaded_files, memory_used),
+            _planner_agent(task, agent_result.preloaded_files, memory_used),
             _coder_agent(
-                gitclaw_result,
-                fallback_gitclaw_result,
-                repair_gitclaw_result,
+                agent_result,
+                fallback_agent_result,
+                repair_agent_result,
                 first_changed_count,
                 changed_count,
                 no_code_changes,
             ),
             _tester_agent(test_result),
-            _reviewer_agent(git_after_gitclaw, changed_count, no_code_changes),
+            _reviewer_agent(git_after_agent, changed_count, no_code_changes),
         ],
         "changed_files": changed_files,
         "tests": {
@@ -85,14 +85,14 @@ def build_success_or_failure_run(
         },
         "safety": {
             "risk_score": _risk_score(
-                gitclaw_passed,
+                agent_passed,
                 tests_passed,
                 git_ok,
                 no_code_changes,
                 has_safety_warnings,
             ),
             "risk_reason": _risk_reason(
-                gitclaw_passed,
+                agent_passed,
                 tests_passed,
                 git_ok,
                 no_code_changes,
@@ -165,8 +165,8 @@ def build_error_run(
             {
                 "name": "Coder Agent",
                 "status": "skipped",
-                "summary": "Gitclaw was not invoked.",
-                "details": "No files were read or written by Gitclaw for this run.",
+                "summary": "OpenAI Agents SDK was not invoked.",
+                "details": "No files were read or written by OpenAI Agents SDK for this run.",
             },
             {
                 "name": "Tester Agent",
@@ -224,7 +224,7 @@ def _analyzer_agent(git_before: GitSnapshot) -> dict:
     return {
         "name": "Analyzer Agent",
         "status": "completed",
-        "summary": "Recorded git status before invoking Gitclaw.",
+        "summary": "Recorded git status before invoking OpenAI Agents SDK.",
         "details": _command_details(status_text),
     }
 
@@ -235,14 +235,14 @@ def _planner_agent(
     return {
         "name": "Planner Agent",
         "status": "completed",
-        "summary": "Built a constrained Gitclaw task prompt.",
+        "summary": "Built a constrained OpenAI Agents SDK task prompt.",
         "details": _command_details(
             "\n\n".join(
                 [
                     f"Task: {task}",
                     f"Repo memory loaded: {_memory_loaded_summary(memory_used)}",
                     f"Preloaded files: {_preloaded_files_summary(preloaded_files)}",
-                    f"Guardrails: {GITCLAW_GUARDRAILS}",
+                    f"Guardrails: {OPENAI_AGENT_GUARDRAILS}",
                 ]
             )
         ),
@@ -250,9 +250,9 @@ def _planner_agent(
 
 
 def _coder_agent(
-    result: CommandResult,
-    fallback_result: CommandResult | None,
-    repair_result: CommandResult | None,
+    result: AgentRunResult,
+    fallback_result: AgentRunResult | None,
+    repair_result: AgentRunResult | None,
     first_changed_count: int,
     final_changed_count: int,
     no_code_changes: bool,
@@ -262,26 +262,26 @@ def _coder_agent(
     if no_code_changes:
         status = "needs_attention"
         summary = (
-            "Fallback Gitclaw attempt also produced 0 code changes."
+            "Fallback OpenAI Agents SDK attempt also produced 0 code changes."
             if fallback_result
-            else "Gitclaw completed but produced 0 code changes."
+            else "OpenAI Agents SDK completed but produced 0 code changes."
         )
     elif repair_result and final_result.return_code == 0:
         status = "completed"
-        summary = "Gitclaw ran a test repair attempt after pytest failed."
+        summary = "OpenAI Agents SDK ran a test repair attempt after pytest failed."
     elif final_result.return_code == 0:
         status = "completed"
         summary = (
-            f"Fallback Gitclaw attempt changed {final_changed_count} file(s)."
+            f"Fallback OpenAI Agents SDK attempt changed {final_changed_count} file(s)."
             if fallback_result
-            else "Gitclaw finished successfully."
+            else "OpenAI Agents SDK finished successfully."
         )
     elif final_result.timed_out:
         status = "failed"
-        summary = "Gitclaw timed out before finishing."
+        summary = "OpenAI Agents SDK timed out before finishing."
     else:
         status = "failed"
-        summary = f"Gitclaw exited with code {final_result.return_code}."
+        summary = f"OpenAI Agents SDK exited with code {final_result.return_code}."
 
     return {
         "name": "Coder Agent",
@@ -335,12 +335,12 @@ def _reviewer_agent(
         "name": "Reviewer Agent",
         "status": "needs_attention" if no_code_changes else "completed",
         "summary": (
-            "Gitclaw completed but produced 0 code changes."
+            "OpenAI Agents SDK completed but produced 0 code changes."
             if no_code_changes
             else "Captured final git status and diff summary."
         ),
         "details": _command_details(
-            "Gitclaw completed but produced 0 code changes."
+            "OpenAI Agents SDK completed but produced 0 code changes."
             if no_code_changes
             else details or "No working tree changes detected."
         ),
@@ -360,7 +360,7 @@ def _test_summary(result: TestRunResult) -> str:
 
 
 def _risk_score(
-    gitclaw_passed: bool,
+    agent_passed: bool,
     tests_passed: bool,
     git_ok: bool,
     no_code_changes: bool,
@@ -369,7 +369,7 @@ def _risk_score(
     if no_code_changes or has_safety_warnings:
         return "medium"
 
-    if gitclaw_passed and tests_passed and git_ok:
+    if agent_passed and tests_passed and git_ok:
         return "low"
 
     if git_ok:
@@ -379,7 +379,7 @@ def _risk_score(
 
 
 def _risk_reason(
-    gitclaw_passed: bool,
+    agent_passed: bool,
     tests_passed: bool,
     git_ok: bool,
     no_code_changes: bool,
@@ -389,10 +389,10 @@ def _risk_reason(
         return "No code changes were produced, so human review is needed before treating the task as done."
 
     if has_safety_warnings:
-        return "Review needed: Gitclaw changed at least one file outside the task or safety boundary."
+        return "Review needed: OpenAI Agents SDK changed at least one file outside the task or safety boundary."
 
-    if gitclaw_passed and tests_passed and git_ok:
-        return "Clean review signal: Gitclaw changed files, git status was captured, and pytest passed."
+    if agent_passed and tests_passed and git_ok:
+        return "Clean review signal: OpenAI Agents SDK changed files, git status was captured, and pytest passed."
 
     if git_ok:
         return "Review needed: BroPilot captured the patch, but verification did not fully pass."
@@ -425,7 +425,7 @@ def _preloaded_files_summary(preloaded_files: list[str]) -> str:
 
 def _learned_change_summary(changed_count: int, no_code_changes: bool) -> str:
     if no_code_changes:
-        return "Latest Gitclaw run produced 0 code changes and needs attention."
+        return "Latest OpenAI Agents SDK run produced 0 code changes and needs attention."
 
     return f"Latest run changed {changed_count} file(s)."
 
@@ -435,7 +435,7 @@ def _safety_actions(task: str, changed_files: list[dict]) -> list[dict]:
         {
             "command": "Protected paths guarded",
             "reason": (
-                "BroPilot instructed Gitclaw to avoid .env, .venv, .git, "
+                "BroPilot instructed OpenAI Agents SDK to avoid .env, .venv, .git, "
                 ".gitagent, workspace, skills/, and git metadata."
             ),
         }
@@ -526,12 +526,12 @@ def _normalize_repo_path(path: str) -> str:
 
 def _memory_used_items(memory_used: list[str]) -> list[str]:
     items = [
-        "Applied protected-path guardrails before invoking Gitclaw.",
-        "Backend subprocess runner handled verification instead of Gitclaw shell tools.",
+        "Applied protected-path guardrails before invoking OpenAI Agents SDK.",
+        "Backend subprocess runner handled verification instead of OpenAI Agents SDK shell tools.",
     ]
 
     if memory_used:
-        items.insert(0, f"Loaded {len(memory_used)} repo memory item(s) into the Gitclaw prompt.")
+        items.insert(0, f"Loaded {len(memory_used)} repo memory item(s) into the OpenAI Agents SDK prompt.")
         items.extend(memory_used[:5])
     else:
         items.insert(0, "No previous repo memory was available, so BroPilot started fresh.")
@@ -555,13 +555,13 @@ def _pr_body(
 ) -> list[str]:
     if no_code_changes:
         return [
-            f"Ran Gitclaw against {repo_path.name}, but it produced 0 code changes.",
+            f"Ran OpenAI Agents SDK against {repo_path.name}, but it produced 0 code changes.",
             "BroPilot did not mark the requested task as completed.",
             f"Verification still ran: python -m pytest {_status_word(test_result.return_code)}.",
         ]
 
     return [
-        f"Ran Gitclaw against {repo_path.name} with the configured safety prompt.",
+        f"Ran OpenAI Agents SDK against {repo_path.name} with the configured safety prompt.",
         f"Captured {changed_count} changed file(s) from git status.",
         f"Verification result: python -m pytest {_status_word(test_result.return_code)}.",
     ]
@@ -636,16 +636,16 @@ def _join_output(stdout: str, stderr: str) -> str:
     return "\n\n".join(parts)
 
 
-def _result_details(result: CommandResult | TestRunResult) -> str:
+def _result_details(result: AgentRunResult | TestRunResult) -> str:
     output = _join_output(result.stdout, result.stderr)
 
     return "\n\n".join(
         item
         for item in [
-            f"attempt: {result.attempt}" if isinstance(result, CommandResult) else "",
+            f"attempt: {result.attempt}" if isinstance(result, AgentRunResult) else "",
             (
                 result.scaffold_summary
-                if isinstance(result, CommandResult) and result.scaffold_summary
+                if isinstance(result, AgentRunResult) and result.scaffold_summary
                 else ""
             ),
             f"command: {_display_command(result.command)}",
@@ -657,44 +657,26 @@ def _result_details(result: CommandResult | TestRunResult) -> str:
 
 
 def _display_command(command: list[str]) -> str:
-    if len(command) >= 4 and command[1] == "--model":
-        return subprocess.list2cmdline([*command[:3], "[prompt omitted]"])
-
-    if "gitclaw_runner.mjs" in " ".join(command):
-        redacted = []
-        skip_next = False
-        for item in command:
-            if skip_next:
-                skip_next = False
-                continue
-
-            redacted.append(item)
-            if item == "--prompt":
-                redacted.append("[prompt omitted]")
-                skip_next = True
-
-        return subprocess.list2cmdline(redacted)
-
     return subprocess.list2cmdline(command)
 
 
 def _coder_details(
-    result: CommandResult,
-    fallback_result: CommandResult | None,
-    repair_result: CommandResult | None,
+    result: AgentRunResult,
+    fallback_result: AgentRunResult | None,
+    repair_result: AgentRunResult | None,
     first_changed_count: int,
     final_changed_count: int,
 ) -> str:
     sections = [
-        f"First Gitclaw attempt changed {first_changed_count} file(s).",
+        f"First OpenAI Agents SDK attempt changed {first_changed_count} file(s).",
         _result_details(result),
     ]
 
     if fallback_result:
         sections.extend(
             [
-                "First Gitclaw attempt produced 0 changes.",
-                "Fallback Gitclaw attempt started.",
+                "First OpenAI Agents SDK attempt produced 0 changes.",
+                "Fallback OpenAI Agents SDK attempt started.",
                 (
                     f"Fallback changed {final_changed_count} file(s)."
                     if final_changed_count
@@ -708,7 +690,7 @@ def _coder_details(
         sections.extend(
             [
                 "BroPilot backend verification failed after the first code attempt.",
-                "Test repair Gitclaw attempt started with pytest output in the prompt.",
+                "Test repair OpenAI Agents SDK attempt started with pytest output in the prompt.",
                 f"After repair, git status shows {final_changed_count} changed file(s).",
                 _result_details(repair_result),
             ]
@@ -739,3 +721,4 @@ def _truncate(value: str, limit: int = 4000) -> str:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+

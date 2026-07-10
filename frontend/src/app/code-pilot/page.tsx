@@ -94,7 +94,7 @@ function getRiskExplanation(risk: string) {
   const normalized = risk.toLowerCase();
 
   if (normalized === "low") {
-    return "Clean review signal: Gitclaw changed files, git status was captured, and pytest passed.";
+    return "Clean review signal: Code Pilot changed files, git status was captured, and pytest passed.";
   }
 
   if (normalized === "medium") {
@@ -485,7 +485,7 @@ export default function Home() {
                       />
                       <MemoryColumn
                         title="Used in prompt"
-                        description="Memory and guardrails sent into Gitclaw."
+                        description="Memory and guardrails sent into the OpenAI agent."
                         items={memory.used}
                       />
                       <MemoryColumn
@@ -582,7 +582,7 @@ function RunSummaryCard({
               <div className="rounded-md border border-zinc-300 bg-white p-4">
                 <p className="text-xs text-zinc-500">Runner</p>
                 <p className="mt-2 text-sm font-medium text-zinc-950">
-                  Gitclaw SDK
+                  OpenAI Agents SDK
                 </p>
               </div>
             </>
@@ -1390,7 +1390,7 @@ function parseCoderLog(details: string) {
     }
 
     if (
-      line.startsWith("First Gitclaw") ||
+      line.startsWith("First OpenAI Agents SDK") ||
       line.startsWith("Fallback") ||
       line.startsWith("Temporary") ||
       line.startsWith("command:") ||
