@@ -1,11 +1,8 @@
 import asyncio
-import importlib
 import json
 import os
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 from app.services.context_preloader import preload_repo_context
 from app.services.repo_memory import memory_prompt_block
@@ -188,7 +185,10 @@ def run_openai_agent(
 
 
 async def _run_agent_async(*, repo_path: Path, prompt: str, model: str) -> str:
-    Agent, Runner, function_tool = _load_agents_sdk()
+    try:
+        from agents import Agent, Runner, function_tool
+    except ImportError as error:
+        raise ImportError("openai-agents is not installed") from error
 
     def safe_path(relative_path: str) -> Path:
         normalized = relative_path.replace("\\", "/").strip().strip("/")
@@ -248,37 +248,6 @@ async def _run_agent_async(*, repo_path: Path, prompt: str, model: str) -> str:
             f"assistant: {_compact_text(output, limit=3000)}",
         ]
     )
-
-
-def _load_agents_sdk() -> tuple[type[Any], Any, Any]:
-    try:
-        sdk = importlib.import_module("agents")
-        return sdk.Agent, sdk.Runner, sdk.function_tool
-    except (AttributeError, ImportError) as error:
-        repo_root = Path(__file__).resolve().parents[3]
-        original_path = list(sys.path)
-        removed_modules = {
-            name: module
-            for name, module in list(sys.modules.items())
-            if name == "agents" or name.startswith("agents.")
-        }
-
-        sys.path = [
-            entry
-            for entry in sys.path
-            if Path(entry or ".").resolve() != repo_root
-        ]
-        for name in removed_modules:
-            sys.modules.pop(name, None)
-
-        try:
-            sdk = importlib.import_module("agents")
-            return sdk.Agent, sdk.Runner, sdk.function_tool
-        except (AttributeError, ImportError) as retry_error:
-            raise ImportError("openai-agents is not installed") from retry_error
-        finally:
-            sys.path = original_path
-
 
 def _build_prompt(task_or_override: str | None, context_block: str, memory_items: list[str]) -> str:
     return "\n\n".join(

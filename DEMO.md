@@ -1,22 +1,22 @@
 # BroPilot Demo Guide
 
-This guide reproduces the local BroPilot demo flow.
+This guide reproduces the local BroPilot Workbench Code Pilot demo.
 
 The demo uses two repositories:
 
-- **BroPilot app repo**: [jualam/BroPilot](https://github.com/jualam/BroPilot.git), containing the Next.js dashboard, FastAPI backend, Gitclaw SDK runner, and agent configuration.
-- **Demo target repo**: [jualam/broPilot-demo](https://github.com/jualam/broPilot-demo.git), a small FastAPI app that BroPilot edits during the demo.
+- **BroPilot app repo**: [jualam/BroPilot](https://github.com/jualam/BroPilot.git), containing the Next.js dashboard and FastAPI backend.
+- **Demo target repo**: [jualam/broPilot-demo](https://github.com/jualam/broPilot-demo.git), a small FastAPI app that Code Pilot edits during the demo.
 
 ## What This Demo Shows
 
-BroPilot turns a local repo path and engineering task into a reviewable code change. It uses the Gitclaw SDK with the CLI tool disabled, records each agent step in a Flight Recorder, runs `python -m pytest` independently, captures changed files and diffs, updates repo memory, and produces a copy-ready PR summary.
+Code Pilot turns a local repo path and engineering task into a reviewable code change. It uses the OpenAI Agents SDK with scoped read/write tools, records each stage in a Flight Recorder, runs `python -m pytest` independently, captures changed files and diffs, updates repo memory, and produces a copy-ready PR summary.
 
 ## Reset The Demo Repo
 
 Clone or place the BroPilot app repo at:
 
 ```powershell
-D:\Applications\BroPilot
+D:\BroPilot
 ```
 
 The demo target repo is expected at:
@@ -28,36 +28,35 @@ D:\bropilot-demo
 Reset it to the known baseline and recreate the disposable demo branch:
 
 ```powershell
-cd D:\Applications\BroPilot
+cd D:\BroPilot
 powershell -ExecutionPolicy Bypass -File .\scripts\reset-demo.ps1
 ```
 
-Expected reset result:
-
-```text
-Demo repo is ready on branch demo-working at baseline d672866
-5 passed
-```
-
-BroPilot edits whichever branch is currently checked out in `D:\bropilot-demo`, so the reset script switches the repo to `demo-working`.
+Code Pilot edits whichever branch is currently checked out in `D:\bropilot-demo`, so the reset script switches the repo to `demo-working`.
 
 ## Run BroPilot Locally
 
 Start the backend:
 
 ```powershell
-cd D:\Applications\BroPilot\backend
+cd D:\BroPilot\backend
 uvicorn app.main:app --reload
 ```
 
 Start the frontend:
 
 ```powershell
-cd D:\Applications\BroPilot\frontend
+cd D:\BroPilot\frontend
 npm run dev
 ```
 
-Open the frontend in the browser and keep the repo path as:
+Open the frontend and go to:
+
+```text
+http://localhost:3000/code-pilot
+```
+
+Keep the repo path as:
 
 ```text
 D:\bropilot-demo
@@ -84,18 +83,15 @@ The successful demo run should show:
 
 ## Demo Highlights
 
-The demo run makes these product decisions visible:
-
-- Gitclaw runs through the SDK with the `cli` tool disabled for Windows-compatible local runs.
-- The Flight Recorder shows the Analyzer, Planner, Coder, Tester, and Reviewer steps.
-- The backend runs `python -m pytest` independently after Gitclaw finishes.
-- The Changed Files panel shows additions/deletions and opens a side-by-side diff.
-- The Safety Panel flags review-sensitive behavior, including unexpected files if Gitclaw edits outside the task boundary.
+- The Flight Recorder shows Analyzer, Planner, Coder, Tester, and Reviewer stages.
+- The backend runs `python -m pytest` independently after Code Pilot edits files.
+- The Changed Files panel opens a side-by-side diff.
+- The Safety Panel flags protected-path and unexpected-file behavior.
 - The Memory Panel shows repo-specific lessons loaded into the prompt and new lessons learned after verification.
 - The PR Summary is ready for human review, but BroPilot does not auto-merge or push.
 
 ## Optional Failure And Repair Flow
 
-BroPilot is designed to make failures visible. If a Gitclaw run produces a broken patch, BroPilot still captures the changed files, shows the pytest failure, and keeps the result review-required.
+BroPilot is designed to make failures visible. If a Code Pilot run produces a broken patch, BroPilot still captures the changed files, shows the pytest failure, and keeps the result review-required.
 
-A follow-up repair task can then use the captured failure context to produce a passing patch. This is the intended safety story: BroPilot helps agents ship code, but it does not pretend a failing or risky change is ready.
+When pytest fails, the backend can run a focused repair attempt using the failure output. The safety story stays the same: BroPilot helps agents prepare code, but it does not pretend a failing or risky change is ready.
