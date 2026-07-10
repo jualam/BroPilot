@@ -1,0 +1,17 @@
+<svg width="680" height="320" viewBox="0 0 680 320" xmlns="http://www.w3.org/2000/svg">
+<rect width="680" height="320" fill="#ffffff"/>
+
+<g>
+<rect x="70" y="68" width="54" height="54" rx="10" fill="#111111"/>
+<path d="M88 95 L102 84 L102 106 Z" fill="#ffffff"/>
+<circle cx="112" cy="95" r="3" fill="#ffffff"/>
+</g>
+<text x="145" y="90" font-size="26" font-weight="500" fill="#111111" font-family="Arial, Helvetica, sans-serif">BroPilot</text>
+<text x="145" y="112" font-size="26" font-weight="400" fill="#5f5e5a" font-family="Arial, Helvetica, sans-serif">Workbench</text>
+
+<g>
+<rect x="315" y="205" width="50" height="50" rx="10" fill="#111111"/>
+<path d="M330 220 L346 230 L330 240 Z" fill="#ffffff"/>
+<circle cx="350" cy="230" r="2.6" fill="#ffffff"/>
+</g>
+</svg>

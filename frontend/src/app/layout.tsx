@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "BroPilot",
-  description: "A safe multi-agent PR builder for reviewable code changes.",
+  title: "BroPilot Workbench",
+  description: "Review-ready AI workflows for high-trust automation.",
   icons: {
     icon: "/icon.svg",
   },
