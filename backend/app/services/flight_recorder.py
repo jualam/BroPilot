@@ -235,17 +235,8 @@ def _planner_agent(
     return {
         "name": "Planner Agent",
         "status": "completed",
-        "summary": "Built a constrained OpenAI Agents SDK task prompt.",
-        "details": _command_details(
-            "\n\n".join(
-                [
-                    f"Task: {task}",
-                    f"Repo memory loaded: {_memory_loaded_summary(memory_used)}",
-                    f"Preloaded files: {_preloaded_files_summary(preloaded_files)}",
-                    f"Guardrails: {OPENAI_AGENT_GUARDRAILS}",
-                ]
-            )
-        ),
+        "summary": "Prepared a scoped plan with repo context, file boundaries, and pytest verification.",
+        "details": _command_details(_planner_details(task, preloaded_files, memory_used)),
     }
 
 
@@ -268,13 +259,15 @@ def _coder_agent(
         )
     elif repair_result and final_result.return_code == 0:
         status = "completed"
-        summary = "OpenAI Agents SDK ran a test repair attempt after pytest failed."
+        summary = (
+            "Prepared code changes, then ran a focused repair attempt after pytest failed."
+        )
     elif final_result.return_code == 0:
         status = "completed"
         summary = (
             f"Fallback OpenAI Agents SDK attempt changed {final_changed_count} file(s)."
             if fallback_result
-            else "OpenAI Agents SDK finished successfully."
+            else f"Prepared review-ready edits across {final_changed_count} changed file(s)."
         )
     elif final_result.timed_out:
         status = "failed"
@@ -356,6 +349,28 @@ def _test_summary(result: TestRunResult) -> str:
 
     return _last_interesting_line(_join_output(result.stdout, result.stderr)) or (
         f"pytest exited with code {result.return_code}."
+    )
+
+
+def _planner_details(task: str, preloaded_files: list[str], memory_used: list[str]) -> str:
+    allowed_paths = _explicit_allowed_paths(task)
+    scope = ", ".join(allowed_paths) if allowed_paths else "Use the narrowest relevant files."
+
+    return "\n\n".join(
+        [
+            "Structured plan",
+            f"- Task: {task.strip()}",
+            f"- Scope: {scope}",
+            "- Expected edit: implement the requested behavior and add/update matching tests.",
+            "- Verification: backend will run python -m pytest independently.",
+            "- Review rule: no commit, push, merge, or protected-path edits.",
+            "",
+            "Context sent to Code Pilot",
+            f"- Repo memory: {_memory_loaded_summary(memory_used)}",
+            f"- Preloaded files: {_preloaded_files_summary(preloaded_files)}",
+            "",
+            f"Guardrails: {OPENAI_AGENT_GUARDRAILS}",
+        ]
     )
 
 
@@ -668,6 +683,10 @@ def _coder_details(
     final_changed_count: int,
 ) -> str:
     sections = [
+        "Coder summary",
+        "- Used scoped read/write tools only.",
+        "- Did not commit, push, merge, or run shell commands.",
+        "- Backend verification runs after the agent finishes.",
         f"First OpenAI Agents SDK attempt changed {first_changed_count} file(s).",
         _result_details(result),
     ]
