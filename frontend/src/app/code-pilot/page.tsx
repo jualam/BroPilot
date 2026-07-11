@@ -533,6 +533,7 @@ export default function Home() {
                   onChange={(event) => setRepoPath(event.target.value)}
                   placeholder="D:\\bropilot-demo"
                   required
+                  suppressHydrationWarning
                 />
               </label>
 
@@ -544,6 +545,7 @@ export default function Home() {
                   onChange={(event) => setTask(event.target.value)}
                   placeholder="Describe the code change Code Pilot should prepare"
                   required
+                  suppressHydrationWarning
                 />
               </label>
 
@@ -552,6 +554,7 @@ export default function Home() {
                   className="inline-flex min-h-11 items-center justify-center rounded-md bg-white px-4 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
                   disabled={isLoading}
                   type="submit"
+                  suppressHydrationWarning
                 >
                   {isLoading ? "Running Code Pilot..." : "Run Code Pilot"}
                 </button>

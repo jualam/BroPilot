@@ -201,7 +201,7 @@ def get_repo_status(repo_path: str = Query(...)):
         "message": (
             f"{changed_count} changed file(s): {', '.join(changed_files[:3])}"
             if changed_count
-            else "Good starting point for a clean demo run."
+            else "Working tree is clean."
         ),
     }
 
