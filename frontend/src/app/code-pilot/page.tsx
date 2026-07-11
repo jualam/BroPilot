@@ -344,7 +344,7 @@ export default function Home() {
   const testSummary = run ? parseTestSummary(run) : null;
 
   return (
-    <main className="min-h-screen bg-[#09090a] text-zinc-100">
+    <main className="code-pilot-shell min-h-screen bg-[#09090a] text-zinc-100">
       <TopNav />
       <div className="mx-auto flex w-full max-w-[1199px] flex-col gap-6 px-5 py-6 sm:px-8 lg:px-10">
 
@@ -740,10 +740,72 @@ function TechnicalLog({ agent, run }: { agent: AgentStep; run: RunResponse }) {
     return <CoderTechnicalLog details={agent.details} run={run} />;
   }
 
+  if (agent.name === "Planner Agent") {
+    return <PlannerTechnicalLog details={agent.details} />;
+  }
+
   return (
     <pre className="mt-3 max-h-64 w-full max-w-full overflow-auto whitespace-pre-wrap break-words rounded-[10px] bg-[#18191b] p-3 font-mono text-xs leading-5 text-zinc-300 border border-white/10">
       {agent.details}
     </pre>
+  );
+}
+
+function PlannerTechnicalLog({ details }: { details: string }) {
+  const sections = parsePlannerLog(details);
+
+  return (
+    <div className="mt-3 grid max-h-[720px] gap-3 overflow-auto rounded-[10px] bg-[#18191b] p-4 border border-white/10">
+      <div className="grid gap-3 lg:grid-cols-[0.8fr_1.2fr]">
+        <LogBlock title="Selected model" lines={sections.model} accent />
+        <LogBlock title="Planner summary" lines={sections.summary} />
+      </div>
+
+      <LogBlock title="Structured plan" lines={sections.plan} />
+      <LogBlock title="Context sent to Code Pilot" lines={sections.context} />
+      <LogBlock title="Guardrails" lines={sections.guardrails} mono />
+      <LogBlock title="Raw planner log" lines={sections.other} mono />
+    </div>
+  );
+}
+
+function LogBlock({
+  title,
+  lines,
+  mono = false,
+  accent = false,
+}: {
+  title: string;
+  lines: string[];
+  mono?: boolean;
+  accent?: boolean;
+}) {
+  if (!lines.length) {
+    return null;
+  }
+
+  return (
+    <section className="min-w-0 rounded-[8px] border border-white/10 bg-[#111214] p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">
+        {title}
+      </p>
+      <div
+        className={`mt-3 min-w-0 rounded-[7px] border px-3 py-2 text-sm leading-6 ${
+          accent
+            ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
+            : "border-white/10 bg-[#18191b] text-zinc-300"
+        } ${mono ? "font-mono text-xs" : ""}`}
+      >
+        {lines.map((line, index) => (
+          <p
+            className="min-w-0 whitespace-pre-wrap break-words py-1.5"
+            key={`${title}-line-${index}`}
+          >
+            {line}
+          </p>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -1355,7 +1417,7 @@ function getAgentHighlights(agent: AgentStep, run: RunResponse) {
   if (agent.name === "Coder Agent") {
     const fileNames = run.changed_files.map((file) => file.path).join(", ");
     const highlights = [
-      "SDK runner used with CLI disabled",
+      "Scoped SDK read/write tools",
       `Changed ${run.changed_files.length} file${
         run.changed_files.length === 1 ? "" : "s"
       }`,
@@ -1373,6 +1435,13 @@ function getAgentHighlights(agent: AgentStep, run: RunResponse) {
     return highlights;
   }
 
+  if (agent.name === "Repair Agent") {
+    return [
+      "Focused pytest repair pass",
+      `${run.changed_files.length} files after repair`,
+    ];
+  }
+
   if (agent.name === "Tester Agent") {
     const summary = parseTestSummary(run);
     return [`${run.tests.command} ${run.tests.status}`, summary.label];
@@ -1386,10 +1455,74 @@ function getAgentHighlights(agent: AgentStep, run: RunResponse) {
   }
 
   if (agent.name === "Planner Agent") {
-    return ["Known files preloaded", "Read/write tools preferred"];
+    const model = agent.details.match(/Selected model:\s*([^\n]+)/)?.[1]?.trim();
+    return [
+      model ? `Selected ${model}` : "Selected coding model",
+      "Scoped files and verification",
+    ];
   }
 
   return [];
+}
+
+function parsePlannerLog(details: string) {
+  const summary: string[] = [];
+  const model: string[] = [];
+  const plan: string[] = [];
+  const context: string[] = [];
+  const guardrails: string[] = [];
+  const other: string[] = [];
+  let section: "summary" | "plan" | "context" | "guardrails" | "other" =
+    "summary";
+
+  for (const rawLine of details.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) {
+      continue;
+    }
+
+    if (line === "Structured plan") {
+      section = "plan";
+      continue;
+    }
+
+    if (line === "Context sent to Code Pilot") {
+      section = "context";
+      continue;
+    }
+
+    if (line.startsWith("Selected model:")) {
+      model.push(cleanLogLine(line.replace(/^Selected model:\s*/, "")));
+      continue;
+    }
+
+    if (line.startsWith("Guardrails:")) {
+      section = "guardrails";
+      guardrails.push(cleanLogLine(line.replace(/^Guardrails:\s*/, "")));
+      continue;
+    }
+
+    if (section === "summary") {
+      summary.push(cleanLogLine(line));
+    } else if (section === "plan") {
+      plan.push(cleanLogLine(line.replace(/^-\s*/, "")));
+    } else if (section === "context") {
+      context.push(cleanLogLine(line.replace(/^-\s*/, "")));
+    } else if (section === "guardrails") {
+      guardrails.push(cleanLogLine(line));
+    } else {
+      other.push(cleanLogLine(line));
+    }
+  }
+
+  return {
+    summary: summary.slice(0, 4),
+    model: model.length ? model : ["Model selection not captured"],
+    plan,
+    context,
+    guardrails,
+    other: other.slice(0, 8),
+  };
 }
 
 function parseCoderLog(details: string) {

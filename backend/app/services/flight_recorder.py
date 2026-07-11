@@ -22,6 +22,7 @@ def build_success_or_failure_run(
     agent_result: AgentRunResult,
     fallback_agent_result: AgentRunResult | None,
     repair_agent_result: AgentRunResult | None,
+    reviewer_agent_result: AgentRunResult | None,
     first_changed_count: int,
     test_result: TestRunResult,
     git_after_agent: GitSnapshot,
@@ -65,7 +66,7 @@ def build_success_or_failure_run(
         "completed_at": completed_at,
         "agents": [
             _analyzer_agent(git_before),
-            _planner_agent(task, agent_result.preloaded_files, memory_used),
+            _planner_agent(task, agent_result.preloaded_files, memory_used, agent_result),
             _coder_agent(
                 agent_result,
                 fallback_agent_result,
@@ -74,8 +75,18 @@ def build_success_or_failure_run(
                 changed_count,
                 no_code_changes,
             ),
+            *(
+                [_repair_agent(repair_agent_result, changed_count)]
+                if repair_agent_result
+                else []
+            ),
             _tester_agent(test_result),
-            _reviewer_agent(git_after_agent, changed_count, no_code_changes),
+            _reviewer_agent(
+                git_after_agent,
+                changed_count,
+                no_code_changes,
+                reviewer_agent_result,
+            ),
         ],
         "changed_files": changed_files,
         "tests": {
@@ -230,13 +241,31 @@ def _analyzer_agent(git_before: GitSnapshot) -> dict:
 
 
 def _planner_agent(
-    task: str, preloaded_files: list[str], memory_used: list[str]
+    task: str, preloaded_files: list[str], memory_used: list[str], agent_result: AgentRunResult | None = None
 ) -> dict:
+    model_line = (
+        f"Selected model: {agent_result.selected_model}"
+        if agent_result and agent_result.selected_model
+        else "Selected model: not captured"
+    )
+    planner_line = (
+        agent_result.planner_summary
+        if agent_result and agent_result.planner_summary
+        else "Planner used deterministic fallback summary."
+    )
     return {
         "name": "Planner Agent",
         "status": "completed",
-        "summary": "Prepared a scoped plan with repo context, file boundaries, and pytest verification.",
-        "details": _command_details(_planner_details(task, preloaded_files, memory_used)),
+        "summary": f"Prepared a scoped plan and selected {agent_result.selected_model if agent_result else 'a model'} for coding.",
+        "details": _command_details(
+            "\n\n".join(
+                [
+                    planner_line,
+                    model_line,
+                    _planner_details(task, preloaded_files, memory_used),
+                ]
+            )
+        ),
     }
 
 
@@ -302,8 +331,25 @@ def _tester_agent(result: TestRunResult) -> dict:
     }
 
 
+def _repair_agent(result: AgentRunResult, changed_count: int) -> dict:
+    passed = result.return_code == 0
+    return {
+        "name": "Repair Agent",
+        "status": "completed" if passed else "failed",
+        "summary": (
+            f"Focused repair attempt used {result.selected_model} and left {changed_count} changed file(s)."
+            if passed
+            else f"Repair attempt exited with code {result.return_code}."
+        ),
+        "details": _command_details(_result_details(result)),
+    }
+
+
 def _reviewer_agent(
-    git_after: GitSnapshot, changed_count: int, no_code_changes: bool
+    git_after: GitSnapshot,
+    changed_count: int,
+    no_code_changes: bool,
+    reviewer_result: AgentRunResult | None,
 ) -> dict:
     if git_after.status.return_code != 0:
         return {
@@ -313,9 +359,14 @@ def _reviewer_agent(
             "details": _command_details(git_after.status.stderr),
         }
 
+    reviewer_notes = ""
+    if reviewer_result and reviewer_result.return_code == 0:
+        reviewer_notes = reviewer_result.reviewer_summary or reviewer_result.stdout
+
     details = "\n\n".join(
         item
         for item in [
+            reviewer_notes,
             f"Changed files: {changed_count}",
             git_after.status.stdout.strip(),
             git_after.diff_stat.stdout.strip(),
@@ -330,7 +381,7 @@ def _reviewer_agent(
         "summary": (
             "OpenAI Agents SDK completed but produced 0 code changes."
             if no_code_changes
-            else "Captured final git status and diff summary."
+            else "Reviewer Agent summarized the verified diff and human review signal."
         ),
         "details": _command_details(
             "OpenAI Agents SDK completed but produced 0 code changes."
@@ -684,6 +735,8 @@ def _coder_details(
 ) -> str:
     sections = [
         "Coder summary",
+        f"- Selected model: {result.selected_model}.",
+        f"- Planner summary: {result.planner_summary or 'No planner summary captured.'}",
         "- Used scoped read/write tools only.",
         "- Did not commit, push, merge, or run shell commands.",
         "- Backend verification runs after the agent finishes.",

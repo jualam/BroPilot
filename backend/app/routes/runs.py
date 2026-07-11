@@ -19,6 +19,7 @@ from app.services.openai_agent_service import (
     build_test_repair_prompt,
     is_read_only_task,
     run_openai_agent,
+    run_reviewer_agent,
 )
 from app.services.repo_memory import learn_from_run, load_repo_memory
 from app.services.test_runner import run_pytest
@@ -119,6 +120,18 @@ def start_run(payload: StartRunRequest):
             test_result=test_result,
         )
 
+        reviewer_agent_result = run_reviewer_agent(
+            repo_path=repo_path,
+            task=payload.task,
+            changed_files=git_after_agent.changed_files,
+            test_status=(
+                "python -m pytest passed"
+                if test_result.return_code == 0
+                else f"python -m pytest failed with exit code {test_result.return_code}"
+            ),
+            memory_items=repo_memory.lessons,
+        )
+
         run_data = build_success_or_failure_run(
             run_id=run_id,
             repo_path=repo_path,
@@ -128,6 +141,7 @@ def start_run(payload: StartRunRequest):
             agent_result=agent_result,
             fallback_agent_result=fallback_agent_result,
             repair_agent_result=repair_agent_result,
+            reviewer_agent_result=reviewer_agent_result,
             first_changed_count=first_changed_count,
             test_result=test_result,
             git_after_agent=git_after_agent,

@@ -8,17 +8,19 @@ from app.services.context_preloader import preload_repo_context
 from app.services.repo_memory import memory_prompt_block
 
 
-DEFAULT_OPENAI_AGENT_MODEL = "gpt-5.6-terra"
+MODEL_SOL = "gpt-5.6-sol"
+MODEL_TERRA = "gpt-5.6-terra"
+MODEL_LUNA = "gpt-5.6-luna"
+DEFAULT_OPENAI_AGENT_MODEL = MODEL_TERRA
 OPENAI_AGENT_MODEL_ENV = "BROPILOT_OPENAI_AGENT_MODEL"
 OPENAI_AGENT_TIMEOUT_SECONDS = 20 * 60
 OPENAI_AGENT_GUARDRAILS = (
-    "You are Code Pilot, the code-change workflow inside BroPilot Workbench. "
-    "Make small, review-ready code changes. Use only the provided tools to read "
-    "and write files. Do not modify .env, .venv, .git, .gitagent, workspace, "
-    "skills/, node_modules, or generated artifacts. Prefer existing files and "
-    "project conventions. If tests are needed and a tests/ directory exists, "
-    "put tests there. Do not commit, push, merge, or run shell commands. The "
-    "backend will run python -m pytest and capture git diff after you finish."
+    "You are part of Code Pilot, the code-change workflow inside BroPilot "
+    "Workbench. Make small, review-ready changes. Use only provided tools. "
+    "Do not modify .env, .venv, .git, .gitagent, workspace, skills/, "
+    "node_modules, or generated artifacts. Prefer existing project patterns. "
+    "Do not commit, push, merge, or run shell commands. The backend will run "
+    "python -m pytest and capture git diff after you finish."
 )
 
 
@@ -34,6 +36,16 @@ class AgentRunResult:
     scaffold_summary: str = ""
     attempt: str = "primary"
     memory_used: list[str] = field(default_factory=list)
+    planner_summary: str = ""
+    selected_model: str = DEFAULT_OPENAI_AGENT_MODEL
+    reviewer_summary: str = ""
+
+
+@dataclass
+class PlanResult:
+    model: str
+    summary: str
+    raw_output: str
 
 
 def get_openai_agent_model() -> str:
@@ -126,17 +138,18 @@ def run_openai_agent(
     memory_items: list[str] | None = None,
 ) -> AgentRunResult:
     repo_context = preload_repo_context(repo_path)
-    model = get_openai_agent_model()
-    command = ["openai-agents", "--model", model, "--attempt", attempt]
-    prompt = (
-        _build_prompt(prompt_override, repo_context.to_prompt_block(), memory_items or [])
-        if prompt_override
-        else _build_prompt(task, repo_context.to_prompt_block(), memory_items or [])
-    )
+    prompt_task = prompt_override or task
+    command = ["openai-agents", "--workflow", attempt]
 
     try:
-        stdout = asyncio.run(
-            _run_agent_async(repo_path=repo_path, prompt=prompt, model=model)
+        plan, stdout = asyncio.run(
+            _run_agent_workflow_async(
+                repo_path=repo_path,
+                task=prompt_task,
+                context_block=repo_context.to_prompt_block(),
+                memory_items=memory_items or [],
+                attempt=attempt,
+            )
         )
     except TimeoutError as error:
         return AgentRunResult(
@@ -167,24 +180,86 @@ def run_openai_agent(
             command=command,
             return_code=1,
             stdout="",
-            stderr=f"OpenAI Agents runner failed: {error}",
+            stderr=f"OpenAI Agents workflow failed: {error}",
             preloaded_files=repo_context.file_paths,
             attempt=attempt,
             memory_used=memory_items or [],
+            selected_model=get_openai_agent_model(),
         )
 
     return AgentRunResult(
-        command=command,
+        command=[*command, "--model", plan.model],
         return_code=0,
         stdout=stdout,
         stderr="",
         preloaded_files=repo_context.file_paths,
         attempt=attempt,
         memory_used=memory_items or [],
+        planner_summary=plan.summary,
+        selected_model=plan.model,
     )
 
 
-async def _run_agent_async(*, repo_path: Path, prompt: str, model: str) -> str:
+def run_reviewer_agent(
+    *,
+    repo_path: Path,
+    task: str,
+    changed_files: list[dict],
+    test_status: str,
+    memory_items: list[str] | None = None,
+) -> AgentRunResult:
+    changed_paths = [
+        str(file.get("path", "")).strip()
+        for file in changed_files
+        if str(file.get("path", "")).strip()
+    ]
+    prompt = "\n\n".join(
+        [
+            f"TASK:\n{task.strip()}",
+            f"CHANGED FILES:\n{', '.join(changed_paths) or 'No changed files.'}",
+            f"TEST STATUS:\n{test_status}",
+            f"REPO MEMORY:\n{memory_prompt_block(memory_items or [])}",
+            (
+                "Summarize the review signal in 3 concise bullets: what changed, "
+                "what was verified, and what a human reviewer should inspect. "
+                "Do not invent files or claim merge readiness."
+            ),
+        ]
+    )
+
+    try:
+        summary = asyncio.run(_run_reviewer_async(prompt=prompt))
+    except Exception as error:
+        return AgentRunResult(
+            command=["openai-agents", "--workflow", "reviewer", "--model", MODEL_LUNA],
+            return_code=1,
+            stdout="",
+            stderr=f"Reviewer Agent failed: {error}",
+            attempt="reviewer",
+            memory_used=memory_items or [],
+            selected_model=MODEL_LUNA,
+        )
+
+    return AgentRunResult(
+        command=["openai-agents", "--workflow", "reviewer", "--model", MODEL_LUNA],
+        return_code=0,
+        stdout=summary,
+        stderr="",
+        attempt="reviewer",
+        memory_used=memory_items or [],
+        selected_model=MODEL_LUNA,
+        reviewer_summary=summary,
+    )
+
+
+async def _run_agent_workflow_async(
+    *,
+    repo_path: Path,
+    task: str,
+    context_block: str,
+    memory_items: list[str],
+    attempt: str,
+) -> tuple[PlanResult, str]:
     try:
         from agents import Agent, Runner, function_tool
     except ImportError as error:
@@ -226,42 +301,178 @@ async def _run_agent_async(*, repo_path: Path, prompt: str, model: str) -> str:
         target.write_text(contents, encoding="utf-8")
         return f"wrote {path}"
 
-    agent = Agent(
-        name="Code Pilot",
-        instructions=OPENAI_AGENT_GUARDRAILS,
-        model=model,
+    planner = Agent(
+        name="Planner Agent",
+        instructions=(
+            "Create a small implementation plan for Code Pilot. Choose exactly "
+            f"one model from {MODEL_SOL}, {MODEL_TERRA}, {MODEL_LUNA}. Use "
+            f"{MODEL_LUNA} for trivial endpoint/test changes, {MODEL_TERRA} for "
+            f"normal feature work, and {MODEL_SOL} for complex refactors, security, "
+            "or ambiguous multi-file work. Return compact JSON with keys: "
+            "model, summary, files, verification."
+        ),
+        model=get_openai_agent_model(),
+    )
+    plan_prompt = _build_planner_prompt(task, context_block, memory_items)
+    plan_output = await _run_with_timeout(Runner.run(planner, input=plan_prompt))
+    plan = _parse_plan(_final_output(plan_output), task)
+
+    if attempt == "test-repair":
+        agent_name = "Repair Agent"
+        instructions = (
+            f"{OPENAI_AGENT_GUARDRAILS} You are the Repair Agent. Use pytest "
+            "failure output in the prompt to make the smallest fix needed."
+        )
+    else:
+        agent_name = "Coder Agent"
+        instructions = (
+            f"{OPENAI_AGENT_GUARDRAILS} You are the Coder Agent. Follow the "
+            "Planner Agent plan, edit only necessary files, and summarize changes."
+        )
+
+    coder = Agent(
+        name=agent_name,
+        instructions=instructions,
+        model=plan.model,
         tools=[read_file, write_file],
     )
+    coder_prompt = _build_coder_prompt(task, context_block, memory_items, plan)
+    coder_output = await _run_with_timeout(Runner.run(coder, input=coder_prompt))
+    coder_text = _final_output(coder_output)
 
-    result = await asyncio.wait_for(
-        Runner.run(agent, input=prompt),
-        timeout=OPENAI_AGENT_TIMEOUT_SECONDS,
-    )
-    output = getattr(result, "final_output", None)
-    if output is None:
-        output = str(result)
-
-    return "\n".join(
+    stdout = "\n".join(
         [
-            "OpenAI Agents SDK runner completed.",
-            f"model: {model}",
-            f"assistant: {_compact_text(output, limit=3000)}",
+            "OpenAI Agents SDK workflow completed.",
+            f"planner_agent: {plan.summary}",
+            f"planner_selected_model: {plan.model}",
+            f"{agent_name.lower().replace(' ', '_')}: {_compact_text(coder_text, limit=3000)}",
+        ]
+    )
+    return plan, stdout
+
+
+async def _run_reviewer_async(*, prompt: str) -> str:
+    try:
+        from agents import Agent, Runner
+    except ImportError as error:
+        raise ImportError("openai-agents is not installed") from error
+
+    reviewer = Agent(
+        name="Reviewer Agent",
+        instructions=(
+            "You are the Reviewer Agent for BroPilot Workbench. Produce concise, "
+            "evidence-grounded review notes from the task, changed files, tests, "
+            "and memory. Do not approve automatically."
+        ),
+        model=MODEL_LUNA,
+    )
+    result = await _run_with_timeout(Runner.run(reviewer, input=prompt))
+    return _compact_text(_final_output(result), limit=1400)
+
+
+async def _run_with_timeout(awaitable: object) -> object:
+    return await asyncio.wait_for(awaitable, timeout=OPENAI_AGENT_TIMEOUT_SECONDS)
+
+
+def _build_planner_prompt(task: str, context_block: str, memory_items: list[str]) -> str:
+    return "\n\n".join(
+        [
+            f"TASK:\n{task.strip()}",
+            f"REPO MEMORY:\n{memory_prompt_block(memory_items)}",
+            f"PRELOADED REPO CONTEXT:\n{context_block.strip()}",
+            "Return JSON only.",
         ]
     )
 
-def _build_prompt(task_or_override: str | None, context_block: str, memory_items: list[str]) -> str:
+
+def _build_coder_prompt(
+    task: str, context_block: str, memory_items: list[str], plan: PlanResult
+) -> str:
     return "\n\n".join(
         [
-            f"TASK:\n{(task_or_override or '').strip()}",
-            f"REPO MEMORY FROM PREVIOUS CODE PILOT RUNS:\n{memory_prompt_block(memory_items)}",
+            f"TASK:\n{task.strip()}",
+            f"PLANNER PLAN:\n{plan.summary}",
+            f"SELECTED MODEL:\n{plan.model}",
+            f"REPO MEMORY:\n{memory_prompt_block(memory_items)}",
             f"INSTRUCTIONS:\n{OPENAI_AGENT_GUARDRAILS}",
             f"PRELOADED REPO CONTEXT:\n{context_block.strip()}",
             (
-                "When you are done, summarize the files changed and the review "
-                "intent. The backend will independently run tests and capture git diff."
+                "Use read_file and write_file tools directly. When done, summarize "
+                "files changed and the review intent. The backend will run tests."
             ),
         ]
     )
+
+
+def _parse_plan(output: str, task: str) -> PlanResult:
+    fallback_model = _heuristic_model(task)
+    try:
+        payload = json.loads(_extract_json(output))
+    except json.JSONDecodeError:
+        return PlanResult(
+            model=fallback_model,
+            summary=f"Fallback plan: keep the change small, edit relevant files, verify with pytest. Model: {fallback_model}.",
+            raw_output=output,
+        )
+
+    model = str(payload.get("model") or fallback_model).strip()
+    if model not in {MODEL_SOL, MODEL_TERRA, MODEL_LUNA}:
+        model = fallback_model
+    summary = str(payload.get("summary") or "").strip()
+    files = payload.get("files") or []
+    verification = str(payload.get("verification") or "python -m pytest").strip()
+    if not summary:
+        summary = "Keep the change small, edit relevant files, verify with pytest."
+    if isinstance(files, list) and files:
+        summary = f"{summary} Files: {', '.join(str(file) for file in files[:5])}."
+    summary = f"{summary} Verification: {verification}."
+    return PlanResult(model=model, summary=_compact_text(summary, limit=900), raw_output=output)
+
+
+def _heuristic_model(task: str) -> str:
+    normalized = task.lower()
+    complex_markers = (
+        "security",
+        "auth",
+        "permission",
+        "refactor",
+        "architecture",
+        "database",
+        "migration",
+        "concurrency",
+        "race",
+    )
+    small_markers = (
+        "/status",
+        "/health",
+        "/ping",
+        "simple",
+        "one endpoint",
+        "add tests",
+    )
+    if any(marker in normalized for marker in complex_markers):
+        return MODEL_SOL
+    if any(marker in normalized for marker in small_markers):
+        return MODEL_LUNA
+    return get_openai_agent_model()
+
+
+def _extract_json(value: str) -> str:
+    stripped = value.strip()
+    if stripped.startswith("{") and stripped.endswith("}"):
+        return stripped
+    start = stripped.find("{")
+    end = stripped.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return stripped[start : end + 1]
+    return stripped
+
+
+def _final_output(result: object) -> str:
+    output = getattr(result, "final_output", None)
+    if output is None:
+        output = str(result)
+    return str(output)
 
 
 def _compact_text(value: object, limit: int = 1200) -> str:

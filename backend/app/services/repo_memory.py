@@ -9,7 +9,7 @@ from app.services.test_runner import TestRunResult
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 MEMORY_DIR = BACKEND_DIR / "data" / "memory"
-MAX_LESSONS = 8
+MAX_LESSONS = 12
 MAX_RUNS = 10
 
 
@@ -68,6 +68,7 @@ def learn_from_run(
     learned = _merge_lessons(
         _build_lessons(
             repo_path=repo_path,
+            task=task,
             changed_files=changed_files,
             test_result=test_result,
         )
@@ -104,6 +105,7 @@ def learn_from_run(
 def _build_lessons(
     *,
     repo_path: Path,
+    task: str,
     changed_files: list[dict],
     test_result: TestRunResult,
 ) -> list[str]:
@@ -121,6 +123,9 @@ def _build_lessons(
 
     if changed_paths:
         lessons.append(f"Recent touched files: {', '.join(changed_paths[:5])}.")
+        feature_lesson = _feature_lesson(task, changed_paths)
+        if feature_lesson:
+            lessons.append(feature_lesson)
 
     if test_result.return_code == 0:
         lessons.append("Latest verification: pytest passed.")
@@ -212,6 +217,9 @@ def _canonical_lesson(lesson: str) -> str:
     if normalized.startswith("recent touched files:"):
         return cleaned
 
+    if normalized.startswith("feature:"):
+        return _compact(cleaned, 140)
+
     if normalized.startswith("last verification passed") or normalized.startswith(
         "latest verification: pytest passed"
     ):
@@ -237,6 +245,8 @@ def _lesson_key(lesson: str) -> str:
         return "domain-auth"
     if normalized.startswith("recent touched files:"):
         return "recent-files"
+    if normalized.startswith("feature:"):
+        return normalized
     if normalized.startswith("latest verification:"):
         return "latest-verification"
 
@@ -252,6 +262,50 @@ def _changed_paths(changed_files: list[dict]) -> list[str]:
             paths.append(path)
 
     return paths
+
+
+def _feature_lesson(task: str, changed_paths: list[str]) -> str:
+    normalized = task.lower()
+    endpoint = _extract_endpoint(normalized)
+    if endpoint:
+        main_file = _first_matching_path(changed_paths, "main.py")
+        test_file = _first_matching_path(changed_paths, "test")
+        parts = [f"Feature: {endpoint} endpoint"]
+        if main_file:
+            parts.append(f"implementation {main_file}")
+        if test_file:
+            parts.append(f"test {test_file}")
+        return "; ".join(parts) + "."
+
+    if "profile" in normalized and "404" in normalized:
+        touched = ", ".join(changed_paths[:3])
+        return f"Feature: unknown profile returns 404; touched {touched}."
+
+    if "rate limit" in normalized or "rate limiting" in normalized:
+        touched = ", ".join(changed_paths[:3])
+        return f"Feature: login rate limiting; touched {touched}."
+
+    return ""
+
+
+def _extract_endpoint(task: str) -> str:
+    match = _search_endpoint(task)
+    return match or ""
+
+
+def _search_endpoint(task: str) -> str:
+    import re
+
+    match = re.search(r"/[a-z0-9_-]+", task)
+    return match.group(0) if match else ""
+
+
+def _first_matching_path(paths: list[str], needle: str) -> str:
+    for path in paths:
+        if needle in path:
+            return path
+
+    return ""
 
 
 def _dedupe(items: list[str]) -> list[str]:
