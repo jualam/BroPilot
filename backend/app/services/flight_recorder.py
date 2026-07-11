@@ -598,7 +598,14 @@ def _memory_used_items(memory_used: list[str]) -> list[str]:
 
     if memory_used:
         items.insert(0, f"Loaded {len(memory_used)} repo memory item(s) into the OpenAI Agents SDK prompt.")
-        items.extend(memory_used[:5])
+        feature_lessons = [
+            item for item in memory_used if item.startswith("Feature:")
+        ]
+        general_lessons = [
+            item for item in memory_used if not item.startswith("Feature:")
+        ]
+        items.extend(feature_lessons[:5])
+        items.extend(general_lessons[:5])
     else:
         items.insert(0, "No previous repo memory was available, so BroPilot started fresh.")
 
@@ -609,7 +616,10 @@ def _memory_loaded_summary(memory_used: list[str]) -> str:
     if not memory_used:
         return "No prior repo memory found."
 
-    return f"Loaded {len(memory_used)} repo memory item(s): {', '.join(memory_used[:4])}"
+    feature_lessons = [item for item in memory_used if item.startswith("Feature:")]
+    examples = [*feature_lessons[:2], *memory_used[:4]]
+    unique_examples = list(dict.fromkeys(examples))
+    return f"Loaded {len(memory_used)} repo memory item(s): {', '.join(unique_examples[:5])}"
 
 
 def _pr_body(

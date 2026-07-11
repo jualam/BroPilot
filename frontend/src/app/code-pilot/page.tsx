@@ -4,6 +4,8 @@ import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
 const API_URL = "http://127.0.0.1:8000/api/runs/start";
+const REPO_STATUS_API_URL = "http://127.0.0.1:8000/api/runs/repo-status";
+const REVERT_API_URL = "http://127.0.0.1:8000/api/runs";
 const REVIEW_API_URL = "http://127.0.0.1:8000/api/review/file-diff";
 const DEFAULT_REPO_PATH = "D:\\bropilot-demo";
 const DEFAULT_TASK = "";
@@ -69,6 +71,21 @@ type RunResponse = {
   safety: SafetyReport;
   memory: MemoryReport;
   pr_summary: PrSummary;
+};
+
+type RepoStatus = {
+  status: "clean" | "dirty" | "missing" | "error";
+  label: string;
+  changed_count: number;
+  changed_files: string[];
+  message: string;
+};
+
+type RevertResult = {
+  status: string;
+  message: string;
+  restored_files: number;
+  removed_files: number;
 };
 
 const statusTone: Record<string, string> = {
@@ -168,6 +185,54 @@ function EmptyPanel({ label }: { label: string }) {
   );
 }
 
+function RepoStatusBanner({
+  status,
+  isChecking,
+}: {
+  status: RepoStatus | null;
+  isChecking: boolean;
+}) {
+  const visibleStatus = status ?? {
+    status: "error",
+    label: "Repo status waiting",
+    changed_count: 0,
+    changed_files: [],
+    message: "Enter a repo path to check whether the next run starts clean.",
+  };
+  const tone =
+    visibleStatus.status === "clean"
+      ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
+      : visibleStatus.status === "dirty"
+        ? "border-amber-400/20 bg-amber-400/10 text-amber-200"
+        : "border-white/10 bg-[#111214] text-zinc-300";
+  const dot =
+    visibleStatus.status === "clean"
+      ? "bg-emerald-300"
+      : visibleStatus.status === "dirty"
+        ? "bg-amber-300"
+        : "bg-zinc-500";
+
+  return (
+    <div className={`rounded-[8px] border px-4 py-3 ${tone}`}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={`size-2 shrink-0 rounded-full ${dot}`} />
+          <p className="text-sm font-semibold">
+            {isChecking ? "Checking repo status..." : visibleStatus.label}
+          </p>
+        </div>
+        {visibleStatus.status === "dirty" ? (
+          <span className="text-xs font-medium">
+            {visibleStatus.changed_count} changed file
+            {visibleStatus.changed_count === 1 ? "" : "s"}
+          </span>
+        ) : null}
+      </div>
+      <p className="mt-2 text-xs leading-5 opacity-80">{visibleStatus.message}</p>
+    </div>
+  );
+}
+
 function WorkflowSteps() {
   const steps = [
     "Repo context",
@@ -246,6 +311,11 @@ export default function Home() {
   const [openAgentLogs, setOpenAgentLogs] = useState<Record<string, boolean>>({});
   const [showTestLog, setShowTestLog] = useState(false);
   const [diffFile, setDiffFile] = useState<ChangedFile | null>(null);
+  const [repoStatus, setRepoStatus] = useState<RepoStatus | null>(null);
+  const [isCheckingRepo, setIsCheckingRepo] = useState(false);
+  const [revertResult, setRevertResult] = useState<RevertResult | null>(null);
+  const [isReverting, setIsReverting] = useState(false);
+  const [showRevertDialog, setShowRevertDialog] = useState(false);
 
   const runMeta = useMemo(() => {
     if (!run) {
@@ -269,6 +339,8 @@ export default function Home() {
     setOpenAgentLogs({});
     setShowTestLog(false);
     setDiffFile(null);
+    setRevertResult(null);
+    setShowRevertDialog(false);
 
     try {
       const response = await fetch(API_URL, {
@@ -322,6 +394,55 @@ export default function Home() {
   }
 
   useEffect(() => {
+    const trimmedPath = repoPath.trim();
+
+    if (!trimmedPath) {
+      setRepoStatus(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      setIsCheckingRepo(true);
+
+      try {
+        const response = await fetch(
+          `${REPO_STATUS_API_URL}?repo_path=${encodeURIComponent(trimmedPath)}`,
+          { signal: controller.signal },
+        );
+
+        if (!response.ok) {
+          throw new Error(`Backend returned ${response.status}`);
+        }
+
+        const data = (await response.json()) as RepoStatus;
+        setRepoStatus(data);
+      } catch (caughtError) {
+        if (caughtError instanceof DOMException && caughtError.name === "AbortError") {
+          return;
+        }
+
+        setRepoStatus({
+          status: "error",
+          label: "Repo status unavailable",
+          changed_count: 0,
+          changed_files: [],
+          message: "Start the backend to check whether the repo is clean.",
+        });
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsCheckingRepo(false);
+        }
+      }
+    }, 350);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
+  }, [repoPath]);
+
+  useEffect(() => {
     if (!diffFile || typeof window === "undefined") {
       return;
     }
@@ -342,6 +463,44 @@ export default function Home() {
   }, [diffFile]);
 
   const testSummary = run ? parseTestSummary(run) : null;
+  const isRunReverted = revertResult?.status === "restored";
+
+  async function revertRun() {
+    if (!run || isReverting) {
+      return;
+    }
+
+    setIsReverting(true);
+    setRevertResult(null);
+
+    try {
+      const response = await fetch(`${REVERT_API_URL}/${run.run_id}/revert`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Backend returned ${response.status}`);
+      }
+
+      const data = (await response.json()) as RevertResult;
+      setRevertResult(data);
+      setShowRevertDialog(false);
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Could not restore the checkpoint.";
+
+      setRevertResult({
+        status: "error",
+        message,
+        restored_files: 0,
+        removed_files: 0,
+      });
+    } finally {
+      setIsReverting(false);
+    }
+  }
 
   return (
     <main className="code-pilot-shell min-h-screen bg-[#09090a] text-zinc-100">
@@ -402,6 +561,10 @@ export default function Home() {
                   </p>
                 ) : null}
               </div>
+              <RepoStatusBanner
+                isChecking={isCheckingRepo}
+                status={repoStatus}
+              />
             </form>
           </div>
 
@@ -431,7 +594,11 @@ export default function Home() {
         </section>
 
         <section className="grid min-w-0 gap-6 lg:grid-cols-2">
-          <ChangedFilesPanel run={run} onOpenDiff={openDiff} />
+          <ChangedFilesPanel
+            isRunReverted={isRunReverted}
+            run={run}
+            onOpenDiff={openDiff}
+          />
           <Panel title="Test Results">
             {run && testSummary ? (
               <div className="rounded-[8px] border border-white/10 bg-[#111214] p-4">
@@ -503,6 +670,15 @@ export default function Home() {
             )}
           </Panel>
 
+          <RecoveryPanel
+            isReverting={isReverting}
+            onRevert={() => setShowRevertDialog(true)}
+            result={revertResult}
+            run={run}
+          />
+        </section>
+
+        <section className="min-w-0">
           <Panel
             title="Memory Panel"
           >
@@ -546,6 +722,13 @@ export default function Home() {
           file={diffFile}
           onClose={closeDiff}
           task={run?.task ?? ""}
+        />
+        <RevertConfirmDialog
+          isOpen={showRevertDialog}
+          isReverting={isReverting}
+          onCancel={() => setShowRevertDialog(false)}
+          onConfirm={revertRun}
+          run={run}
         />
       </div>
     </main>
@@ -888,15 +1071,24 @@ function LogSection({
 function ChangedFilesPanel({
   run,
   onOpenDiff,
+  isRunReverted = false,
 }: {
   run: RunResponse | null;
   onOpenDiff: (file: ChangedFile) => void;
+  isRunReverted?: boolean;
 }) {
   return (
     <Panel title="Changed Files">
       {run ? (
         run.changed_files.length ? (
           <div className="grid gap-3">
+            {isRunReverted ? (
+              <div className="rounded-[8px] border border-sky-400/20 bg-sky-400/10 p-4 text-sm leading-6 text-sky-100">
+                This is the historical diff from the completed run. The local
+                repo has been restored to the checkpoint captured before this
+                run.
+              </div>
+            ) : null}
             {run.changed_files.map((file) => (
               <article
                 className="rounded-[8px] border border-white/10 bg-[#111214] p-4"
@@ -941,6 +1133,56 @@ function ChangedFilesPanel({
         )
       ) : (
         <EmptyPanel label="Changed files will appear after a run." />
+      )}
+    </Panel>
+  );
+}
+
+function RecoveryPanel({
+  run,
+  isReverting,
+  result,
+  onRevert,
+}: {
+  run: RunResponse | null;
+  isReverting: boolean;
+  result: RevertResult | null;
+  onRevert: () => void;
+}) {
+  return (
+    <Panel title="Recovery">
+      {run ? (
+        <div className="rounded-[8px] border border-white/10 bg-[#111214] p-4">
+          <p className="text-sm font-semibold text-zinc-50">
+            Local checkpoint captured before this run.
+          </p>
+          <p className="mt-2 text-sm leading-6 text-zinc-400">
+            Restore the target repo to its pre-run state without committing,
+            pushing, or touching GitHub. Earlier local changes remain if they
+            existed before this run.
+          </p>
+          <button
+            className="mt-4 inline-flex min-h-10 items-center justify-center rounded-md border border-red-400/20 bg-red-400/10 px-4 text-sm font-semibold text-red-200 transition hover:bg-red-400/15 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isReverting}
+            onClick={onRevert}
+            type="button"
+          >
+            {isReverting ? "Restoring checkpoint..." : "Revert this run"}
+          </button>
+          {result ? (
+            <div className="mt-4 rounded-[8px] border border-white/10 bg-[#18191b] p-3 text-sm leading-6 text-zinc-300">
+              <p className="font-semibold text-zinc-50">{result.message}</p>
+              <p className="mt-1 text-xs text-zinc-500">
+                Restored {result.restored_files} file
+                {result.restored_files === 1 ? "" : "s"}; removed{" "}
+                {result.removed_files} new file
+                {result.removed_files === 1 ? "" : "s"}.
+              </p>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <EmptyPanel label="A revert checkpoint will be available after a run starts." />
       )}
     </Panel>
   );
@@ -1039,6 +1281,75 @@ function PrSummaryPanel({ run }: { run: RunResponse | null }) {
         <EmptyPanel label="The generated PR title and summary will be shown after Code Pilot completes." />
       )}
     </Panel>
+  );
+}
+
+function RevertConfirmDialog({
+  run,
+  isOpen,
+  isReverting,
+  onCancel,
+  onConfirm,
+}: {
+  run: RunResponse | null;
+  isOpen: boolean;
+  isReverting: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  if (!isOpen || !run) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4 backdrop-blur-sm">
+      <section className="w-full max-w-lg rounded-[10px] border border-white/10 bg-[#101010] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-red-300">
+              Local checkpoint restore
+            </p>
+            <h2 className="mt-3 text-xl font-semibold text-zinc-50">
+              Revert this run?
+            </h2>
+          </div>
+          <StatusPill value={run.status} />
+        </div>
+        <p className="mt-4 text-sm leading-6 text-zinc-300">
+          Code Pilot will restore the target repo to the checkpoint captured
+          immediately before run <span className="font-mono">{run.run_id}</span>.
+          Changes from this run will be removed, while earlier local work stays
+          in place.
+        </p>
+        <div className="mt-5 rounded-[8px] border border-white/10 bg-[#18191b] p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">
+            Run artifact remains
+          </p>
+          <p className="mt-2 text-sm leading-6 text-zinc-300">
+            The flight recorder and diff stay visible as historical evidence,
+            but the working tree is restored locally.
+          </p>
+        </div>
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            className="inline-flex min-h-10 items-center justify-center rounded-md border border-white/10 bg-[#18191b] px-4 text-sm font-semibold text-zinc-300 transition hover:text-zinc-50"
+            disabled={isReverting}
+            onClick={onCancel}
+            type="button"
+          >
+            Cancel
+          </button>
+          <button
+            className="inline-flex min-h-10 items-center justify-center rounded-md border border-red-400/20 bg-red-400/10 px-4 text-sm font-semibold text-red-100 transition hover:bg-red-400/15 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isReverting}
+            onClick={onConfirm}
+            type="button"
+          >
+            {isReverting ? "Restoring..." : "Revert run"}
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -1517,12 +1828,32 @@ function parsePlannerLog(details: string) {
 
   return {
     summary: summary.slice(0, 4),
-    model: model.length ? model : ["Model selection not captured"],
+    model: model.length
+      ? [...model, modelRoutingHint(model[0])]
+      : ["Model selection not captured"],
     plan,
     context,
     guardrails,
     other: other.slice(0, 8),
   };
+}
+
+function modelRoutingHint(model: string) {
+  const normalized = model.toLowerCase();
+
+  if (normalized.includes("luna")) {
+    return "Small endpoint/test task -> Luna";
+  }
+
+  if (normalized.includes("sol")) {
+    return "Complex refactor/auth/security task -> Sol";
+  }
+
+  if (normalized.includes("terra")) {
+    return "Balanced feature work -> Terra";
+  }
+
+  return "Planner selected the model based on task complexity.";
 }
 
 function parseCoderLog(details: string) {
@@ -1723,12 +2054,20 @@ function compactUsedMemory(items: string[]) {
       item.includes("guardrails") ||
       item.includes("Backend subprocess"),
   );
+  const featureLessons = unique
+    .filter((item) => item.startsWith("Feature:"))
+    .slice(0, 4)
+    .map((item) => `Feature lesson: ${item}`);
   const examples = unique
-    .filter((item) => !operational.includes(item))
+    .filter(
+      (item) =>
+        !operational.includes(item) &&
+        !item.startsWith("Feature:"),
+    )
     .slice(0, 3)
     .map((item) => `Memory hint: ${item}`);
 
-  return [...operational, ...examples];
+  return [...operational, ...featureLessons, ...examples];
 }
 
 function compactBeforeMemory(items: string[]) {

@@ -4,9 +4,13 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas.run import StartRunRequest
+from app.services.checkpoint_service import (
+    create_run_checkpoint,
+    restore_run_checkpoint,
+)
 from app.services.flight_recorder import (
     build_error_run,
     build_success_or_failure_run,
@@ -74,6 +78,7 @@ def start_run(payload: StartRunRequest):
                     ),
                 )
         )
+        create_run_checkpoint(run_id, repo_path)
 
         agent_result = run_openai_agent(
             repo_path, payload.task, memory_items=repo_memory.lessons
@@ -159,6 +164,51 @@ def start_run(payload: StartRunRequest):
         )
 
     return _save_run(run_data)
+
+
+@router.get("/repo-status")
+def get_repo_status(repo_path: str = Query(...)):
+    path = Path(repo_path).expanduser()
+
+    if not path.exists() or not path.is_dir():
+        return {
+            "status": "missing",
+            "label": "Repo path not found",
+            "changed_count": 0,
+            "changed_files": [],
+            "message": "Enter a valid local git repo path before running Code Pilot.",
+        }
+
+    snapshot = get_git_snapshot(path)
+    if snapshot.status.return_code != 0:
+        return {
+            "status": "error",
+            "label": "Repo status unavailable",
+            "changed_count": 0,
+            "changed_files": [],
+            "message": snapshot.status.stderr.strip()
+            or "Git status failed for this repo path.",
+        }
+
+    changed_files = [file["path"] for file in snapshot.changed_files]
+    changed_count = len(changed_files)
+
+    return {
+        "status": "dirty" if changed_count else "clean",
+        "label": "Repo has existing changes" if changed_count else "Repo clean",
+        "changed_count": changed_count,
+        "changed_files": changed_files,
+        "message": (
+            f"{changed_count} changed file(s): {', '.join(changed_files[:3])}"
+            if changed_count
+            else "Good starting point for a clean demo run."
+        ),
+    }
+
+
+@router.post("/{run_id}/revert")
+def revert_run(run_id: str):
+    return restore_run_checkpoint(run_id)
 
 
 @router.get("/{run_id}")
