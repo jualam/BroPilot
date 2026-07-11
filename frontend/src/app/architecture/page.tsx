@@ -111,7 +111,7 @@ export default function ArchitecturePage() {
       <section className="mx-auto w-full max-w-7xl px-5 py-16 sm:px-8 lg:px-10">
         <div className="mx-auto max-w-6xl text-center">
           <p className="text-sm font-medium text-zinc-500">Shared workflow pattern</p>
-          <h1 className="mt-3 text-5xl font-semibold leading-tight tracking-tight text-zinc-950 sm:text-6xl">
+          <h1 className="font-copperplate mt-3 text-5xl font-semibold leading-tight text-zinc-950 sm:text-6xl">
             One workflow pattern for code, memos, and portfolio operations.
           </h1>
           <p className="mx-auto mt-5 max-w-5xl text-lg leading-8 text-zinc-600">
@@ -136,7 +136,7 @@ export default function ArchitecturePage() {
               <span className="inline-flex min-h-7 min-w-8 items-center justify-center rounded-md bg-zinc-950 px-2 text-xs font-semibold text-white">
                 0{index + 1}
               </span>
-              <h2 className="mt-4 text-xl font-semibold tracking-tight text-zinc-950">
+              <h2 className="font-copperplate mt-4 text-xl font-semibold text-zinc-950">
                 {step.title}
               </h2>
               <p className="mt-3 text-sm leading-6 text-zinc-600">
@@ -149,7 +149,7 @@ export default function ArchitecturePage() {
         <section className="mt-20">
           <div className="max-w-3xl">
             <p className="text-sm font-medium text-zinc-500">Workflow mapping</p>
-            <h2 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-950 sm:text-4xl">
+            <h2 className="font-copperplate mt-2 text-3xl font-semibold text-zinc-950 sm:text-4xl">
               How the pattern maps across workflows
             </h2>
           </div>
@@ -160,7 +160,7 @@ export default function ArchitecturePage() {
                 className="flex min-h-[560px] flex-col rounded-lg border border-zinc-200 bg-white p-6 shadow-[0_1px_1px_rgba(0,0,0,0.03),0_12px_36px_rgba(0,0,0,0.05)]"
                 key={mapping.title}
               >
-                <h3 className="text-center text-2xl font-semibold tracking-tight text-zinc-950">
+                <h3 className="font-copperplate text-center text-2xl font-semibold text-zinc-950">
                   {mapping.title}
                 </h3>
 

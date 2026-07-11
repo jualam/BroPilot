@@ -92,9 +92,9 @@ export default function LandingPage() {
       <TopNav />
 
       <section className="mx-auto grid w-full max-w-7xl gap-12 px-5 pb-16 pt-20 sm:px-8 sm:pt-24 lg:px-10 lg:pb-24">
-        <div className="mx-auto max-w-4xl text-center">
-          <h1 className="text-5xl font-semibold leading-[1.02] tracking-tight text-zinc-950 sm:text-6xl lg:text-7xl">
-            Review-ready AI workflows for high-trust automation.
+        <div className="mx-auto max-w-6xl text-center">
+          <h1 className="font-copperplate text-5xl font-semibold leading-[1.02] text-zinc-950 sm:text-6xl lg:text-7xl">
+            Review-ready AI workflows for high-trust automation
           </h1>
           <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-zinc-600 sm:text-xl">
             BroPilot Workbench turns ambiguous work into structured, verified,
@@ -121,18 +121,18 @@ export default function LandingPage() {
         <div className="grid gap-4 md:grid-cols-3">
           {workflowCards.map((card) => (
             <Link
-              className="group flex min-h-[360px] flex-col justify-between rounded-lg border border-zinc-200 bg-[#fafafa] p-7 text-center shadow-[0_1px_1px_rgba(0,0,0,0.03),0_10px_30px_rgba(0,0,0,0.04)] transition hover:-translate-y-0.5 hover:border-zinc-300 hover:bg-white hover:shadow-[0_1px_1px_rgba(0,0,0,0.04),0_18px_44px_rgba(0,0,0,0.07)]"
+              className="group flex min-h-[360px] flex-col justify-between rounded-lg border border-zinc-300 bg-zinc-100 p-7 text-center shadow-[0_1px_1px_rgba(0,0,0,0.04),0_10px_30px_rgba(0,0,0,0.05)] transition hover:-translate-y-0.5 hover:border-zinc-400 hover:bg-zinc-50 hover:shadow-[0_1px_1px_rgba(0,0,0,0.05),0_18px_44px_rgba(0,0,0,0.08)]"
               href={card.href}
               key={card.title}
             >
               <div className="flex flex-1 flex-col items-center justify-center">
-                <div className="mb-7 grid size-12 place-items-center rounded-lg border border-zinc-200 bg-white shadow-sm">
+                <div className="mb-7 grid size-12 place-items-center rounded-lg border border-zinc-300 bg-zinc-50 shadow-sm">
                   <span className="size-2 rounded-full bg-zinc-950" />
                 </div>
-                <h2 className="text-3xl font-semibold tracking-tight text-zinc-950">
+                <h2 className="font-copperplate text-3xl font-semibold text-zinc-950">
                   {card.title}
                 </h2>
-                <div className="mt-6 max-w-sm rounded-md border border-zinc-200 bg-zinc-50 p-4 shadow-sm">
+                <div className="mt-6 max-w-sm rounded-md border border-zinc-300 bg-white/80 p-4 shadow-sm">
                   <p className="text-sm leading-6 text-zinc-600">
                     {card.description}
                   </p>
@@ -152,7 +152,7 @@ export default function LandingPage() {
             <div>
               <p className="text-sm font-medium text-zinc-500">Shared pattern</p>
               <h2 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-950 sm:text-4xl">
-                One workflow pattern, multiple use cases.
+                One workflow pattern, multiple use cases
               </h2>
             </div>
             <Link className="text-sm font-semibold text-zinc-950 hover:text-zinc-600" href="/architecture">

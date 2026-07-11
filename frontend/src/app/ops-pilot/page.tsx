@@ -16,7 +16,7 @@ export default function OpsPilotPage() {
           <p className="mb-4 inline-flex min-h-8 items-center rounded-full border border-zinc-200 bg-zinc-50 px-3 text-sm font-medium text-zinc-600">
             Architecture demo placeholder
           </p>
-          <h1 className="text-5xl font-semibold tracking-tight text-zinc-950">
+          <h1 className="font-copperplate text-5xl font-semibold text-zinc-950">
             Ops Pilot
           </h1>
           <p className="mt-4 text-xl leading-8 text-zinc-600">
@@ -66,14 +66,36 @@ export default function OpsPilotPage() {
 
 function PlaceholderNav() {
   return (
-    <header className="border-b border-zinc-200 bg-white">
-      <nav className="mx-auto flex min-h-16 w-full max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-10">
-        <Link className="text-sm font-semibold text-zinc-950" href="/">
-          BroPilot Workbench
+    <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/90 backdrop-blur">
+      <nav className="mx-auto flex min-h-16 w-full max-w-7xl items-center justify-between gap-6 px-5 sm:px-8 lg:px-10">
+        <Link
+          aria-label="BroPilot Workbench home"
+          className="relative block h-[46px] w-[224px] shrink-0 overflow-hidden"
+          href="/"
+        >
+          <img
+            alt="BroPilot Workbench"
+            className="absolute -left-[52px] -top-[50px] h-auto w-[520px] max-w-none"
+            src="/bropilot-workbench-logo.svg"
+          />
         </Link>
-        <Link className="text-sm font-medium text-zinc-600 hover:text-zinc-950" href="/">
-          Back home
-        </Link>
+        <div className="hidden items-center gap-1 text-sm text-zinc-600 md:flex">
+          <Link className="rounded-md px-3 py-2 transition hover:bg-zinc-100 hover:text-zinc-950" href="/">
+            Home
+          </Link>
+          <Link className="rounded-md px-3 py-2 transition hover:bg-zinc-100 hover:text-zinc-950" href="/code-pilot">
+            Code Pilot
+          </Link>
+          <Link className="rounded-md px-3 py-2 transition hover:bg-zinc-100 hover:text-zinc-950" href="/memo-pilot">
+            Memo Pilot
+          </Link>
+          <Link className="rounded-md bg-zinc-100 px-3 py-2 text-zinc-950 transition hover:bg-zinc-100" href="/ops-pilot">
+            Ops Pilot
+          </Link>
+          <Link className="rounded-md px-3 py-2 transition hover:bg-zinc-100 hover:text-zinc-950" href="/architecture">
+            Workflow Pattern
+          </Link>
+        </div>
       </nav>
     </header>
   );

@@ -508,7 +508,7 @@ export default function Home() {
       <div className="mx-auto flex w-full max-w-[1199px] flex-col gap-6 px-5 py-6 sm:px-8 lg:px-10">
 
         <section className="mx-auto max-w-3xl py-4 text-center">
-          <h1 className="text-5xl font-semibold leading-none tracking-tight text-zinc-50 sm:text-6xl lg:text-7xl">
+          <h1 className="font-copperplate text-5xl font-semibold leading-none text-zinc-50 sm:text-6xl lg:text-7xl">
             Code Pilot
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-lg leading-7 text-zinc-400 sm:text-xl">
