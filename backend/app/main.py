@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
+from app.routes.memo_pilot import router as memo_pilot_router
 from app.routes.review import router as review_router
 from app.routes.runs import router as runs_router
 
@@ -19,6 +20,7 @@ app.add_middleware(
 
 app.include_router(runs_router)
 app.include_router(review_router)
+app.include_router(memo_pilot_router)
 
 
 @app.get("/health")
