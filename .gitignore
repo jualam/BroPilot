@@ -15,6 +15,8 @@ dist/
 backend/data/runs/
 backend/data/memory/
 .flight-recorder/
+tools/installers/
+tools/Tesseract-OCR/
 
 # OS
 .DS_Store

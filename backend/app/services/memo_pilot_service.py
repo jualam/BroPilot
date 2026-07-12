@@ -96,20 +96,15 @@ def generate_memo_pilot_response(
     )
 
 
-async def generate_memo_pilot_response_async(
-    *,
-    documents: list[dict],
-    manual_notes: str,
-    company_name: str,
-    sector: str,
-) -> dict:
-    stages = []
-    stages.append(_stage(
-        "Document Intake",
-        "completed",
-        f"Deterministic intake received {len(documents)} document(s), company metadata, and manual notes.",
-    ))
+def extract_memo_pilot_preview(*, documents: list[dict], manual_notes: str) -> dict:
+    processed_documents, _all_sources = _extract_sources_and_documents(documents, manual_notes)
+    return {
+        "documents": processed_documents,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
 
+
+def _extract_sources_and_documents(documents: list[dict], manual_notes: str) -> tuple[list[dict], list[dict]]:
     processed_documents = []
     all_sources = []
     for document in documents:
@@ -145,6 +140,24 @@ async def generate_memo_pilot_response_async(
             }
         )
 
+    return processed_documents, all_sources
+
+
+async def generate_memo_pilot_response_async(
+    *,
+    documents: list[dict],
+    manual_notes: str,
+    company_name: str,
+    sector: str,
+) -> dict:
+    stages = []
+    stages.append(_stage(
+        "Document Intake",
+        "completed",
+        f"Deterministic intake received {len(documents)} document(s), company metadata, and manual notes.",
+    ))
+
+    processed_documents, all_sources = _extract_sources_and_documents(documents, manual_notes)
     stages.append(_stage("Text Extraction", "completed", _text_extraction_summary(processed_documents, manual_notes)))
 
     evidence = extract_evidence(all_sources)

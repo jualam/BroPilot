@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 
 const MEMO_API_URL = "http://127.0.0.1:8000/api/memo-pilot/generate";
+const MEMO_EXTRACT_API_URL = "http://127.0.0.1:8000/api/memo-pilot/extract";
 
 type DocumentResult = {
   filename: string;
@@ -93,8 +94,10 @@ export default function MemoPilotPage() {
   const [otherMarketCategory, setOtherMarketCategory] = useState("");
   const [manualNotes, setManualNotes] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [extractionPreview, setExtractionPreview] = useState<DocumentResult[]>([]);
   const [result, setResult] = useState<MemoResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -109,6 +112,7 @@ export default function MemoPilotPage() {
 
   function handleFiles(event: ChangeEvent<HTMLInputElement>) {
     const incomingFiles = Array.from(event.target.files ?? []);
+    setExtractionPreview([]);
     setFiles((currentFiles) => {
       const byKey = new Map(
         currentFiles.map((file) => [`${file.name}-${file.size}-${file.lastModified}`, file]),
@@ -122,6 +126,7 @@ export default function MemoPilotPage() {
   }
 
   function removeFile(fileToRemove: File) {
+    setExtractionPreview([]);
     setFiles((currentFiles) =>
       currentFiles.filter(
         (file) =>
@@ -133,19 +138,41 @@ export default function MemoPilotPage() {
 
   async function generateMemo() {
     setIsLoading(true);
+    setIsExtracting(true);
     setError(null);
     setCopied(false);
+    setResult(null);
+    setExtractionPreview([]);
 
-    const formData = new FormData();
-    files.forEach((file) => formData.append("documents", file));
-    formData.append("manual_notes", manualNotes);
-    formData.append("company_name", companyName);
-    formData.append("sector", selectedMarketCategory);
+    const buildFormData = () => {
+      const formData = new FormData();
+      files.forEach((file) => formData.append("documents", file));
+      formData.append("manual_notes", manualNotes);
+      formData.append("company_name", companyName);
+      formData.append("sector", selectedMarketCategory);
+      return formData;
+    };
 
     try {
+      const extractionResponse = await fetch(MEMO_EXTRACT_API_URL, {
+        method: "POST",
+        body: buildFormData(),
+      });
+
+      if (!extractionResponse.ok) {
+        const payload = await extractionResponse.json().catch(() => null);
+        throw new Error(payload?.detail ?? `Backend returned ${extractionResponse.status}`);
+      }
+
+      const extractionPayload = (await extractionResponse.json()) as {
+        documents?: DocumentResult[];
+      };
+      setExtractionPreview(extractionPayload.documents ?? []);
+      setIsExtracting(false);
+
       const response = await fetch(MEMO_API_URL, {
         method: "POST",
-        body: formData,
+        body: buildFormData(),
       });
 
       if (!response.ok) {
@@ -162,6 +189,7 @@ export default function MemoPilotPage() {
       );
     } finally {
       setIsLoading(false);
+      setIsExtracting(false);
     }
   }
 
@@ -170,7 +198,7 @@ export default function MemoPilotPage() {
       return;
     }
 
-    await navigator.clipboard.writeText(result.artifact_markdown);
+    await navigator.clipboard.writeText(memoOnlyMarkdown(result));
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1600);
   }
@@ -180,8 +208,19 @@ export default function MemoPilotPage() {
       return;
     }
     downloadBlob(
-      result.artifact_markdown,
+      memoOnlyMarkdown(result),
       `${companySlug}_diligence_memo.md`,
+      "text/markdown;charset=utf-8",
+    );
+  }
+
+  function downloadMarkdownWithAppendix() {
+    if (!result) {
+      return;
+    }
+    downloadBlob(
+      result.artifact_markdown,
+      `${companySlug}_diligence_memo_with_evidence_appendix.md`,
       "text/markdown;charset=utf-8",
     );
   }
@@ -195,7 +234,22 @@ export default function MemoPilotPage() {
       setError("Browser blocked the PDF export window.");
       return;
     }
-    popup.document.write(buildPrintableMemo(result, companyName, selectedMarketCategory));
+    popup.document.write(buildPrintableMemo(result, companyName, selectedMarketCategory, false));
+    popup.document.close();
+    popup.focus();
+    popup.print();
+  }
+
+  function downloadPdfWithAppendix() {
+    if (!result) {
+      return;
+    }
+    const popup = window.open("", "_blank", "width=900,height=1100");
+    if (!popup) {
+      setError("Browser blocked the PDF export window.");
+      return;
+    }
+    popup.document.write(buildPrintableMemo(result, companyName, selectedMarketCategory, true));
     popup.document.close();
     popup.focus();
     popup.print();
@@ -325,7 +379,11 @@ export default function MemoPilotPage() {
                 onClick={generateMemo}
                 type="button"
               >
-                {isLoading ? "Generating memo..." : "Generate Memo"}
+                {isLoading
+                  ? isExtracting
+                    ? "Extracting documents..."
+                    : "Generating memo..."
+                  : "Generate Memo"}
               </button>
               {error ? (
                 <p className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -335,7 +393,13 @@ export default function MemoPilotPage() {
             </div>
           </div>
 
-          <UploadedFilesCard files={files} onRemoveFile={removeFile} result={result} />
+          <UploadedFilesCard
+            files={files}
+            isExtracting={isExtracting}
+            onRemoveFile={removeFile}
+            previewDocuments={extractionPreview}
+            result={result}
+          />
         </section>
 
         {result ? (
@@ -352,7 +416,9 @@ export default function MemoPilotPage() {
               copied={copied}
               onCopy={copyMarkdown}
               onDownloadMarkdown={downloadMarkdown}
+              onDownloadMarkdownWithAppendix={downloadMarkdownWithAppendix}
               onDownloadPdf={downloadPdf}
+              onDownloadPdfWithAppendix={downloadPdfWithAppendix}
               result={result}
             />
           </>
@@ -405,22 +471,27 @@ function TopNav() {
 
 function UploadedFilesCard({
   files,
+  isExtracting,
   onRemoveFile,
+  previewDocuments,
   result,
 }: {
   files: File[];
+  isExtracting: boolean;
   onRemoveFile: (file: File) => void;
+  previewDocuments: DocumentResult[];
   result: MemoResult | null;
 }) {
   const [selectedDocument, setSelectedDocument] = useState<DocumentResult | null>(null);
+  const extractedDocuments = result?.documents.length ? result.documents : previewDocuments;
 
   return (
     <>
       <section className="rounded-lg border border-zinc-200 bg-zinc-50 p-6 shadow-sm">
         <h2 className="text-xl font-semibold tracking-tight">Uploaded Documents</h2>
         <div className="mt-4 grid gap-3">
-          {result?.documents.length ? (
-            result.documents.map((document) => (
+          {extractedDocuments.length ? (
+            extractedDocuments.map((document) => (
               <article className="rounded-md border border-zinc-200 bg-white p-4" key={document.filename}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -457,6 +528,14 @@ function UploadedFilesCard({
                 </p>
               </article>
             ))
+          ) : isExtracting ? (
+            <div className="rounded-md border border-zinc-200 bg-white p-5">
+              <p className="text-sm font-semibold text-zinc-950">Extracting documents</p>
+              <p className="mt-2 text-sm leading-6 text-zinc-500">
+                Memo Pilot is reading text and tables now. The extracted document summaries
+                will appear here before the full memo finishes.
+              </p>
+            </div>
           ) : files.length ? (
             files.map((file) => (
               <article className="rounded-md border border-zinc-200 bg-white p-4" key={file.name}>
@@ -789,33 +868,46 @@ function ExportPanel({
   copied,
   onCopy,
   onDownloadMarkdown,
+  onDownloadMarkdownWithAppendix,
   onDownloadPdf,
+  onDownloadPdfWithAppendix,
 }: {
   result: MemoResult;
   copied: boolean;
   onCopy: () => void;
   onDownloadMarkdown: () => void;
+  onDownloadMarkdownWithAppendix: () => void;
   onDownloadPdf: () => void;
+  onDownloadPdfWithAppendix: () => void;
 }) {
+  const cleanMemo = memoOnlyMarkdown(result);
+
   return (
     <section className="rounded-lg border border-zinc-200 bg-zinc-50 p-6 shadow-sm">
-      <h2 className="text-xl font-semibold tracking-tight">Copy-ready Markdown Artifact</h2>
+      <h2 className="text-xl font-semibold tracking-tight">Copy-ready Memo Artifact</h2>
       <p className="mt-2 text-sm leading-6 text-zinc-600">
-        Prepared for review, not for automated investment decisions.
+        The main memo stays clean for review. The full source-backed evidence
+        appendix is available as a separate audit export.
       </p>
       <div className="mt-4 flex flex-wrap gap-2">
         <button className="rounded-md bg-zinc-950 px-4 py-2 text-sm font-semibold text-white" onClick={onCopy} type="button">
-          {copied ? "Copied" : "Copy Markdown"}
+          {copied ? "Copied" : "Copy Memo"}
         </button>
         <button className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-950" onClick={onDownloadMarkdown} type="button">
-          Download Markdown
+          Download Memo MD
+        </button>
+        <button className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-950" onClick={onDownloadMarkdownWithAppendix} type="button">
+          Download Memo + Appendix MD
         </button>
         <button className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-950" onClick={onDownloadPdf} type="button">
-          Download PDF
+          Download Memo PDF
+        </button>
+        <button className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-950" onClick={onDownloadPdfWithAppendix} type="button">
+          Download Memo + Appendix PDF
         </button>
       </div>
       <pre className="mt-5 max-h-[720px] min-h-[520px] overflow-auto whitespace-pre-wrap rounded-md border border-zinc-200 bg-white p-4 font-mono text-xs leading-5 text-zinc-700">
-        {result.artifact_markdown}
+        {cleanMemo}
       </pre>
     </section>
   );
@@ -831,8 +923,13 @@ function downloadBlob(contents: string, filename: string, type: string) {
   URL.revokeObjectURL(url);
 }
 
-function buildPrintableMemo(result: MemoResult, companyName: string, sector: string) {
-  const safeMarkdown = result.artifact_markdown
+function memoOnlyMarkdown(result: MemoResult) {
+  return result.artifact_markdown.split(/\n## Evidence Appendix\b/)[0].trim();
+}
+
+function buildPrintableMemo(result: MemoResult, companyName: string, sector: string, includeAppendix: boolean) {
+  const markdown = includeAppendix ? result.artifact_markdown : memoOnlyMarkdown(result);
+  const safeMarkdown = markdown
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
