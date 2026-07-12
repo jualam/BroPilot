@@ -11,6 +11,7 @@ type DocumentResult = {
   document_type: string;
   extraction_status: string;
   summary: string;
+  tables?: ExtractedTable[];
 };
 
 type EvidenceItem = {
@@ -18,6 +19,14 @@ type EvidenceItem = {
   source_document: string;
   category: string;
   support_level: string;
+  evidence_type?: string;
+  table_title?: string;
+};
+
+type ExtractedTable = {
+  title: string;
+  markdown: string;
+  rows?: Record<string, string>[];
 };
 
 type Stage = {
@@ -44,9 +53,9 @@ type MemoResult = {
     reviewer_notes: string[];
   };
   charts: {
-    arr_growth: { year: string; arr: number }[];
+    arr_growth: { year: string; arr: number; display_value?: string }[];
     evidence_completeness: { category: string; score: number }[];
-    risk_priority: { risk: string; score: number }[];
+    risk_priority: { risk: string; score: number; reason?: string; source?: string }[];
   };
   artifact_markdown: string;
   generated_at: string;
@@ -75,7 +84,7 @@ const marketCategories = [
 
 export default function MemoPilotPage() {
   const [companyName, setCompanyName] = useState("");
-  const [marketCategory, setMarketCategory] = useState("Fintech");
+  const [marketCategory, setMarketCategory] = useState("");
   const [otherMarketCategory, setOtherMarketCategory] = useState("");
   const [manualNotes, setManualNotes] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -94,7 +103,27 @@ export default function MemoPilotPage() {
       : marketCategory;
 
   function handleFiles(event: ChangeEvent<HTMLInputElement>) {
-    setFiles(Array.from(event.target.files ?? []));
+    const incomingFiles = Array.from(event.target.files ?? []);
+    setFiles((currentFiles) => {
+      const byKey = new Map(
+        currentFiles.map((file) => [`${file.name}-${file.size}-${file.lastModified}`, file]),
+      );
+      incomingFiles.forEach((file) => {
+        byKey.set(`${file.name}-${file.size}-${file.lastModified}`, file);
+      });
+      return Array.from(byKey.values());
+    });
+    event.target.value = "";
+  }
+
+  function removeFile(fileToRemove: File) {
+    setFiles((currentFiles) =>
+      currentFiles.filter(
+        (file) =>
+          `${file.name}-${file.size}-${file.lastModified}` !==
+          `${fileToRemove.name}-${fileToRemove.size}-${fileToRemove.lastModified}`,
+      ),
+    );
   }
 
   async function generateMemo() {
@@ -170,7 +199,7 @@ export default function MemoPilotPage() {
   return (
     <main className="min-h-screen bg-white text-zinc-950">
       <TopNav />
-      <section className="mx-auto grid w-full max-w-7xl gap-8 px-5 py-10 sm:px-8 lg:px-10">
+      <section className="mx-auto grid w-full max-w-7xl gap-8 px-5 pb-20 pt-10 sm:px-8 lg:px-10">
         <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr] lg:items-end">
           <div>
             <h1 className="font-copperplate text-5xl font-semibold text-zinc-950 sm:text-6xl">
@@ -206,6 +235,7 @@ export default function MemoPilotPage() {
                   onChange={(event) => setMarketCategory(event.target.value)}
                   value={marketCategory}
                 >
+                  <option value="">Select category</option>
                   {marketCategories.map((category) => (
                     <option key={category} value={category}>
                       {category}
@@ -228,13 +258,46 @@ export default function MemoPilotPage() {
 
             <label className="mt-5 grid gap-2">
               <span className="text-sm font-semibold text-zinc-800">Company PDFs</span>
-              <input
-                accept="application/pdf"
-                className="min-h-12 rounded-md border border-dashed border-zinc-300 bg-zinc-50 px-3 py-3 text-sm text-zinc-700"
-                multiple
-                onChange={handleFiles}
-                type="file"
-              />
+              <div className="rounded-md border border-dashed border-zinc-300 bg-zinc-50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-zinc-800">Company document upload</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      Add one or more PDFs before generating the memo.
+                    </p>
+                  </div>
+                  <span className="inline-flex min-h-10 cursor-pointer items-center rounded-md border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-950 shadow-sm transition hover:bg-zinc-100">
+                    {files.length ? "Add more PDFs" : "Choose PDFs"}
+                    <input
+                      accept="application/pdf"
+                      className="sr-only"
+                      multiple
+                      onChange={handleFiles}
+                      type="file"
+                    />
+                  </span>
+                </div>
+                {files.length ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {files.map((file) => (
+                      <span
+                        className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white py-1 pl-3 pr-1 text-xs font-medium text-zinc-600"
+                        key={`${file.name}-${file.size}-${file.lastModified}`}
+                      >
+                        {file.name}
+                        <button
+                          aria-label={`Remove ${file.name}`}
+                          className="grid size-5 place-items-center rounded-full text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-950"
+                          onClick={() => removeFile(file)}
+                          type="button"
+                        >
+                          x
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
               <span className="text-xs text-zinc-500">
                 Supports text-based PDFs. Scanned PDFs may require OCR.
               </span>
@@ -267,7 +330,7 @@ export default function MemoPilotPage() {
             </div>
           </div>
 
-          <UploadedFilesCard files={files} result={result} />
+          <UploadedFilesCard files={files} onRemoveFile={removeFile} result={result} />
         </section>
 
         {result ? (
@@ -279,16 +342,14 @@ export default function MemoPilotPage() {
 
             <ChartsPanel charts={result.charts} />
 
-            <section className="grid gap-5 xl:grid-cols-[1fr_0.82fr]">
-              <MemoOutput result={result} />
-              <ExportPanel
-                copied={copied}
-                onCopy={copyMarkdown}
-                onDownloadMarkdown={downloadMarkdown}
-                onDownloadPdf={downloadPdf}
-                result={result}
-              />
-            </section>
+            <MemoOutput result={result} />
+            <ExportPanel
+              copied={copied}
+              onCopy={copyMarkdown}
+              onDownloadMarkdown={downloadMarkdown}
+              onDownloadPdf={downloadPdf}
+              result={result}
+            />
           </>
         ) : (
           <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-8 text-center text-sm text-zinc-500">
@@ -337,7 +398,15 @@ function TopNav() {
   );
 }
 
-function UploadedFilesCard({ files, result }: { files: File[]; result: MemoResult | null }) {
+function UploadedFilesCard({
+  files,
+  onRemoveFile,
+  result,
+}: {
+  files: File[];
+  onRemoveFile: (file: File) => void;
+  result: MemoResult | null;
+}) {
   return (
     <section className="rounded-lg border border-zinc-200 bg-zinc-50 p-6 shadow-sm">
       <h2 className="text-xl font-semibold tracking-tight">Uploaded Documents</h2>
@@ -353,12 +422,31 @@ function UploadedFilesCard({ files, result }: { files: File[]; result: MemoResul
               </div>
               <p className="mt-2 text-xs font-medium uppercase text-zinc-500">{document.extraction_status}</p>
               <p className="mt-2 text-sm leading-6 text-zinc-600">{document.summary}</p>
+              {document.tables?.length ? (
+                <div className="mt-4 grid gap-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">
+                    Structured tables
+                  </p>
+                  {document.tables.map((table) => (
+                    <ExtractedTablePreview table={table} key={table.title} />
+                  ))}
+                </div>
+              ) : null}
             </article>
           ))
         ) : files.length ? (
           files.map((file) => (
             <article className="rounded-md border border-zinc-200 bg-white p-4" key={file.name}>
-              <p className="font-mono text-sm font-semibold text-zinc-950">{file.name}</p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="font-mono text-sm font-semibold text-zinc-950">{file.name}</p>
+                <button
+                  className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-950"
+                  onClick={() => onRemoveFile(file)}
+                  type="button"
+                >
+                  Remove
+                </button>
+              </div>
               <p className="mt-2 text-sm text-zinc-500">Ready for extraction</p>
             </article>
           ))
@@ -369,6 +457,50 @@ function UploadedFilesCard({ files, result }: { files: File[]; result: MemoResul
         )}
       </div>
     </section>
+  );
+}
+
+function ExtractedTablePreview({ table }: { table: ExtractedTable }) {
+  const rows = table.rows ?? [];
+  const headers = rows.length ? Object.keys(rows[0]) : [];
+
+  return (
+    <div className="overflow-hidden rounded-md border border-zinc-200 bg-zinc-50">
+      <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-3 py-2">
+        <p className="text-xs font-semibold text-zinc-700">{table.title}</p>
+        <span className="text-xs text-zinc-500">{rows.length} row(s)</span>
+      </div>
+      {rows.length && headers.length ? (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] border-collapse text-left text-xs">
+            <thead className="bg-white text-zinc-500">
+              <tr>
+                {headers.map((header) => (
+                  <th className="border-b border-zinc-200 px-3 py-2 font-semibold" key={header}>
+                    {header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.slice(0, 8).map((row, rowIndex) => (
+                <tr className="align-top" key={`${table.title}-${rowIndex}`}>
+                  {headers.map((header) => (
+                    <td className="border-b border-zinc-100 px-3 py-2 text-zinc-700" key={header}>
+                      {row[header]}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <pre className="max-h-48 overflow-auto whitespace-pre-wrap p-3 font-mono text-xs leading-5 text-zinc-600">
+          {table.markdown}
+        </pre>
+      )}
+    </div>
   );
 }
 
@@ -397,38 +529,52 @@ function FlightRecorder({ stages }: { stages: Stage[] }) {
 }
 
 function EvidenceTable({ evidence }: { evidence: EvidenceItem[] }) {
+  const [showAllEvidence, setShowAllEvidence] = useState(false);
+  const visibleEvidence = showAllEvidence ? evidence.slice(0, 24) : evidence.slice(0, 8);
+
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
-      <h2 className="text-xl font-semibold tracking-tight">Evidence Table</h2>
-      <div className="mt-5 overflow-hidden rounded-md border border-zinc-200">
-        <table className="w-full min-w-[720px] border-collapse text-left text-sm">
-          <thead className="bg-zinc-50 text-xs uppercase text-zinc-500">
-            <tr>
-              <th className="border-b border-zinc-200 p-3">Evidence / fact</th>
-              <th className="border-b border-zinc-200 p-3">Source</th>
-              <th className="border-b border-zinc-200 p-3">Category</th>
-              <th className="border-b border-zinc-200 p-3">Support</th>
-            </tr>
-          </thead>
-          <tbody>
-            {evidence.length ? (
-              evidence.slice(0, 14).map((item, index) => (
-                <tr className="align-top" key={`${item.source_document}-${index}`}>
-                  <td className="border-b border-zinc-100 p-3 leading-6 text-zinc-700">{item.fact}</td>
-                  <td className="border-b border-zinc-100 p-3 font-mono text-xs text-zinc-600">{item.source_document}</td>
-                  <td className="border-b border-zinc-100 p-3 text-zinc-700">{item.category}</td>
-                  <td className="border-b border-zinc-100 p-3 text-zinc-700">{item.support_level}</td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td className="p-5 text-zinc-500" colSpan={4}>
-                  No strong evidence extracted.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold tracking-tight">Evidence Table</h2>
+        {evidence.length > 8 ? (
+          <button
+            className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 hover:text-zinc-950"
+            onClick={() => setShowAllEvidence((current) => !current)}
+            type="button"
+          >
+            {showAllEvidence ? "Show less" : `Show ${Math.min(evidence.length - 8, 16)} more`}
+          </button>
+        ) : null}
+      </div>
+      <div className="mt-5 grid max-h-[720px] gap-3 overflow-auto pr-1">
+        {evidence.length ? (
+          visibleEvidence.map((item, index) => (
+            <article
+              className="rounded-md border border-zinc-200 bg-zinc-50 p-4"
+              key={`${item.source_document}-${index}`}
+            >
+              <p className="text-sm leading-7 text-zinc-800">{item.fact}</p>
+              <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-zinc-600">
+                <span className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 font-medium">
+                  {item.evidence_type === "table_row" ? "Table row" : "Text"}
+                </span>
+                <span className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 font-medium">
+                  {item.category}
+                </span>
+                <span className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 font-medium">
+                  {item.support_level}
+                </span>
+                <span className="min-w-0 break-all rounded-full border border-zinc-200 bg-white px-2.5 py-1 font-mono">
+                  {item.source_document}
+                </span>
+              </div>
+            </article>
+          ))
+        ) : (
+          <p className="rounded-md border border-dashed border-zinc-300 bg-zinc-50 p-5 text-sm text-zinc-500">
+            No strong evidence extracted.
+          </p>
+        )}
       </div>
     </section>
   );
@@ -440,13 +586,13 @@ function ChartsPanel({ charts }: { charts: MemoResult["charts"] }) {
       <ChartCard title="ARR Growth">
         {charts.arr_growth.length ? (
           charts.arr_growth.map((point) => (
-            <Bar key={point.year} label={point.year} value={`$${formatNumber(point.arr)}`} width={Math.min(100, point.arr / 100000)} />
+            <Bar key={point.year} label={point.year} value={point.display_value ?? formatCompactCurrency(point.arr)} width={Math.min(100, point.arr / 100000)} />
           ))
         ) : (
           <EmptyChart />
         )}
       </ChartCard>
-      <ChartCard title="Evidence Completeness">
+      <ChartCard title="Evidence Coverage">
         {charts.evidence_completeness.map((point) => (
           <Bar key={point.category} label={point.category} value={`${point.score}%`} width={point.score} />
         ))}
@@ -454,7 +600,7 @@ function ChartsPanel({ charts }: { charts: MemoResult["charts"] }) {
       <ChartCard title="Risk Priority">
         {charts.risk_priority.length ? (
           charts.risk_priority.map((point) => (
-            <Bar key={point.risk} label={point.risk} value={`${point.score}`} width={point.score} />
+            <Bar key={point.risk} label={point.risk} value={`${point.score}`} width={point.score} detail={point.reason} />
           ))
         ) : (
           <EmptyChart />
@@ -473,7 +619,7 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
   );
 }
 
-function Bar({ label, value, width }: { label: string; value: string; width: number }) {
+function Bar({ label, value, width, detail }: { label: string; value: string; width: number; detail?: string }) {
   return (
     <div>
       <div className="mb-1 flex justify-between gap-3 text-xs text-zinc-600">
@@ -483,6 +629,7 @@ function Bar({ label, value, width }: { label: string; value: string; width: num
       <div className="h-2 rounded-full bg-zinc-100">
         <div className="h-2 rounded-full bg-zinc-950" style={{ width: `${Math.max(6, width)}%` }} />
       </div>
+      {detail ? <p className="mt-1 text-xs leading-5 text-zinc-500">{detail}</p> : null}
     </div>
   );
 }
@@ -499,7 +646,7 @@ function MemoOutput({ result }: { result: MemoResult }) {
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
       <h2 className="text-xl font-semibold tracking-tight">Output Sections</h2>
-      <div className="mt-5 grid gap-4">
+      <div className="mt-5 grid gap-4 xl:grid-cols-2">
         {memoSections.map(([title, key]) => (
           <article className="rounded-md border border-zinc-200 bg-zinc-50 p-4" key={key}>
             <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-zinc-500">{title}</h3>
@@ -508,16 +655,16 @@ function MemoOutput({ result }: { result: MemoResult }) {
         ))}
         <ListSection title="Key Risks" items={result.memo.key_risks} />
         <ListSection title="Missing Evidence" items={result.memo.missing_evidence} />
-        <ListSection title="Diligence Questions" items={result.memo.diligence_questions} />
+        <ListSection title="Diligence Questions" items={result.memo.diligence_questions} wide />
         <ListSection title="Reviewer Notes" items={result.memo.reviewer_notes} />
       </div>
     </section>
   );
 }
 
-function ListSection({ title, items }: { title: string; items: string[] }) {
+function ListSection({ title, items, wide = false }: { title: string; items: string[]; wide?: boolean }) {
   return (
-    <article className="rounded-md border border-zinc-200 bg-zinc-50 p-4">
+    <article className={`rounded-md border border-zinc-200 bg-zinc-50 p-4 ${wide ? "xl:col-span-2" : ""}`}>
       <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-zinc-500">{title}</h3>
       <ul className="mt-3 grid gap-2 text-sm leading-6 text-zinc-700">
         {items.map((item) => (
@@ -561,7 +708,7 @@ function ExportPanel({
           Download PDF
         </button>
       </div>
-      <pre className="mt-5 max-h-[640px] overflow-auto whitespace-pre-wrap rounded-md border border-zinc-200 bg-white p-4 font-mono text-xs leading-5 text-zinc-700">
+      <pre className="mt-5 max-h-[720px] min-h-[520px] overflow-auto whitespace-pre-wrap rounded-md border border-zinc-200 bg-white p-4 font-mono text-xs leading-5 text-zinc-700">
         {result.artifact_markdown}
       </pre>
     </section>
@@ -590,8 +737,14 @@ h1,h2{border-bottom:1px solid #ddd;padding-bottom:8px} pre{white-space:pre-wrap;
 </style></head><body><h1>${companyName || "Company"} Diligence Memo Draft</h1><div class="meta">Generated ${new Date(result.generated_at).toLocaleDateString()} · Sector: ${sector || "Not provided"}</div><pre>${safeMarkdown}</pre></body></html>`;
 }
 
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
+function formatCompactCurrency(value: number) {
+  if (value >= 1_000_000) {
+    return `$${(value / 1_000_000).toFixed(1)}M`;
+  }
+  if (value >= 1_000) {
+    return `$${(value / 1_000).toFixed(1)}K`;
+  }
+  return `$${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value)}`;
 }
 
 function slugify(value: string) {
