@@ -18,6 +18,7 @@ DOCUMENT_TYPES = [
     ("Pitch Deck", ("pitch", "deck", "investor", "fundraise", "vision")),
     ("Financial Summary", ("arr", "revenue", "gross margin", "ebitda", "burn", "runway")),
     ("Customer Notes", ("customer", "churn", "retention", "nps", "renewal")),
+    ("Risk Review", ("risk review", "implementation risk", "operational risk", "diligence implication", "mitigation", "implementation scalability", "ehr integration effort", "services-heavy onboarding")),
     ("Market Research", ("market", "tam", "sam", "competition", "segment")),
     ("Product Overview", ("product", "platform", "workflow", "feature", "integration")),
     ("Sales/GTM Notes", ("sales", "pipeline", "gtm", "go-to-market", "quota", "conversion")),
@@ -243,7 +244,10 @@ def detect_document_type(text: str, filename: str) -> str:
 
 
 def summarize_text(text: str) -> str:
-    sentences = _sentences(text)
+    sentences = [
+        sentence for sentence in _sentences(text)
+        if not _is_low_value_evidence(sentence)
+    ]
     if not sentences:
         return "No extractable summary available."
     return _compact_whitespace(" ".join(sentences[:2]))[:320]
@@ -1038,10 +1042,35 @@ def _build_diligence_questions(evidence: list[dict], missing: list[str]) -> list
 def _document_summary(source: dict) -> str:
     summary = source["summary"]
     table_count = len(source.get("tables") or [])
+    if summary == "No extractable summary available." and table_count:
+        summary = _table_based_summary(source.get("tables") or [])
     if table_count:
         suffix = f" Extracted {table_count} structured table(s)."
         return f"{summary}{suffix}"[:420]
     return summary
+
+
+def _table_based_summary(tables: list[dict]) -> str:
+    metric_labels = []
+    for table in tables:
+        for row in table.get("rows") or []:
+            label = _row_label(row)
+            if label:
+                metric_labels.append(label)
+            if len(metric_labels) >= 4:
+                break
+        if len(metric_labels) >= 4:
+            break
+    if metric_labels:
+        return "Extracted structured evidence including " + ", ".join(metric_labels[:4]) + "."
+    return "Extracted structured tables for review."
+
+
+def _row_label(row: dict) -> str:
+    for key in ("Metric", "Segment", "Customer type", "Customer segment"):
+        if row.get(key):
+            return str(row[key])
+    return ""
 
 
 def _clean_extracted_text(text: str) -> str:

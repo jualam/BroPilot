@@ -407,56 +407,141 @@ function UploadedFilesCard({
   onRemoveFile: (file: File) => void;
   result: MemoResult | null;
 }) {
+  const [selectedDocument, setSelectedDocument] = useState<DocumentResult | null>(null);
+
   return (
-    <section className="rounded-lg border border-zinc-200 bg-zinc-50 p-6 shadow-sm">
-      <h2 className="text-xl font-semibold tracking-tight">Uploaded Documents</h2>
-      <div className="mt-4 grid gap-3">
-        {result?.documents.length ? (
-          result.documents.map((document) => (
-            <article className="rounded-md border border-zinc-200 bg-white p-4" key={document.filename}>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="font-mono text-sm font-semibold text-zinc-950">{document.filename}</p>
-                <span className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-600">
-                  {document.document_type}
-                </span>
-              </div>
-              <p className="mt-2 text-xs font-medium uppercase text-zinc-500">{document.extraction_status}</p>
-              <p className="mt-2 text-sm leading-6 text-zinc-600">{document.summary}</p>
-              {document.tables?.length ? (
-                <div className="mt-4 grid gap-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">
-                    Structured tables
-                  </p>
-                  {document.tables.map((table) => (
-                    <ExtractedTablePreview table={table} key={table.title} />
-                  ))}
+    <>
+      <section className="rounded-lg border border-zinc-200 bg-zinc-50 p-6 shadow-sm">
+        <h2 className="text-xl font-semibold tracking-tight">Uploaded Documents</h2>
+        <div className="mt-4 grid gap-3">
+          {result?.documents.length ? (
+            result.documents.map((document) => (
+              <article className="rounded-md border border-zinc-200 bg-white p-4" key={document.filename}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="break-all font-mono text-sm font-semibold text-zinc-950">{document.filename}</p>
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-zinc-600">
+                      <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 font-medium">
+                        {document.document_type}
+                      </span>
+                      <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 font-medium">
+                        {document.extraction_status}
+                      </span>
+                      <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 font-medium">
+                        {document.tables?.length ?? 0} table{(document.tables?.length ?? 0) === 1 ? "" : "s"} extracted
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    className="shrink-0 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 hover:text-zinc-950"
+                    onClick={() => setSelectedDocument(document)}
+                    type="button"
+                  >
+                    View extraction details
+                  </button>
                 </div>
-              ) : null}
-            </article>
-          ))
-        ) : files.length ? (
-          files.map((file) => (
-            <article className="rounded-md border border-zinc-200 bg-white p-4" key={file.name}>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="font-mono text-sm font-semibold text-zinc-950">{file.name}</p>
-                <button
-                  className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-950"
-                  onClick={() => onRemoveFile(file)}
-                  type="button"
+                <p
+                  className="mt-3 overflow-hidden text-sm leading-6 text-zinc-600"
+                  style={{
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                  }}
                 >
-                  Remove
-                </button>
-              </div>
-              <p className="mt-2 text-sm text-zinc-500">Ready for extraction</p>
-            </article>
-          ))
-        ) : (
-          <p className="rounded-md border border-dashed border-zinc-300 bg-white p-5 text-sm text-zinc-500">
-            No documents selected yet.
-          </p>
-        )}
-      </div>
-    </section>
+                  {document.summary}
+                </p>
+              </article>
+            ))
+          ) : files.length ? (
+            files.map((file) => (
+              <article className="rounded-md border border-zinc-200 bg-white p-4" key={file.name}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="font-mono text-sm font-semibold text-zinc-950">{file.name}</p>
+                  <button
+                    className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-950"
+                    onClick={() => onRemoveFile(file)}
+                    type="button"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <p className="mt-2 text-sm text-zinc-500">Ready for extraction</p>
+              </article>
+            ))
+          ) : (
+            <p className="rounded-md border border-dashed border-zinc-300 bg-white p-5 text-sm text-zinc-500">
+              No documents selected yet.
+            </p>
+          )}
+        </div>
+      </section>
+      {selectedDocument ? (
+        <ExtractionDetailsModal
+          document={selectedDocument}
+          onClose={() => setSelectedDocument(null)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function ExtractionDetailsModal({
+  document,
+  onClose,
+}: {
+  document: DocumentResult;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-zinc-950/35 px-4 py-6 backdrop-blur-sm">
+      <section className="flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-2xl">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-zinc-200 p-5">
+          <div className="min-w-0">
+            <p className="break-all font-mono text-sm font-semibold text-zinc-950">{document.filename}</p>
+            <div className="mt-2 flex flex-wrap gap-2 text-xs text-zinc-600">
+              <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 font-medium">
+                {document.document_type}
+              </span>
+              <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 font-medium">
+                {document.extraction_status}
+              </span>
+              <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 font-medium">
+                {document.tables?.length ?? 0} table{(document.tables?.length ?? 0) === 1 ? "" : "s"} extracted
+              </span>
+            </div>
+          </div>
+          <button
+            className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 hover:text-zinc-950"
+            onClick={onClose}
+            type="button"
+          >
+            Close
+          </button>
+        </div>
+        <div className="grid gap-5 overflow-auto p-5">
+          <div className="rounded-md border border-zinc-200 bg-zinc-50 p-4">
+            <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-zinc-500">
+              Extraction summary
+            </h3>
+            <p className="mt-3 text-sm leading-6 text-zinc-700">{document.summary}</p>
+          </div>
+          <div className="grid gap-3">
+            <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-zinc-500">
+              Structured tables
+            </h3>
+            {document.tables?.length ? (
+              document.tables.map((table) => (
+                <ExtractedTablePreview table={table} key={table.title} />
+              ))
+            ) : (
+              <p className="rounded-md border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-500">
+                No structured tables were extracted from this document.
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }
 
