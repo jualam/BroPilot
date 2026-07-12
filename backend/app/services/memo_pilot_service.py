@@ -1,7 +1,24 @@
+import asyncio
 import io
+import json
+import os
 import re
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
+
+from app.services.openai_agent_service import MODEL_LUNA, MODEL_TERRA
+
+
+MEMO_AGENT_MODEL_ENV = "BROPILOT_MEMO_AGENT_MODEL"
+MEMO_AGENT_TIMEOUT_SECONDS = 90
+MEMO_GUARDRAIL_BLOCKED_TERMS = (
+    "we recommend investing",
+    "recommend investing",
+    "approve the investment",
+    "reject the investment",
+    "pass on the investment",
+    "buy the company",
+)
 
 
 MEMO_SECTIONS = [
@@ -69,8 +86,29 @@ def generate_memo_pilot_response(
     company_name: str,
     sector: str,
 ) -> dict:
+    return asyncio.run(
+        generate_memo_pilot_response_async(
+            documents=documents,
+            manual_notes=manual_notes,
+            company_name=company_name,
+            sector=sector,
+        )
+    )
+
+
+async def generate_memo_pilot_response_async(
+    *,
+    documents: list[dict],
+    manual_notes: str,
+    company_name: str,
+    sector: str,
+) -> dict:
     stages = []
-    stages.append(_stage("Document Intake", "completed", f"Received {len(documents)} document(s) and manual notes."))
+    stages.append(_stage(
+        "Document Intake",
+        "completed",
+        f"Deterministic intake received {len(documents)} document(s), company metadata, and manual notes.",
+    ))
 
     processed_documents = []
     all_sources = []
@@ -110,38 +148,262 @@ def generate_memo_pilot_response(
     stages.append(_stage("Text Extraction", "completed", _text_extraction_summary(processed_documents, manual_notes)))
 
     evidence = extract_evidence(all_sources)
-    stages.append(_stage("Evidence Extraction", "completed", f"Extracted {len(evidence)} evidence item(s) with source names."))
+    stages.append(_stage(
+        "Evidence Extraction",
+        "completed",
+        f"Deterministic evidence builder extracted {len(evidence)} source-backed evidence item(s).",
+    ))
 
-    memo_plan = plan_memo(evidence, company_name, sector)
-    stages.append(_stage("Memo Planner", "completed", "Mapped evidence into diligence memo sections."))
+    deterministic_plan = plan_memo(evidence, company_name, sector)
+    deterministic_memo = draft_memo(evidence, deterministic_plan, company_name, sector)
+    deterministic_memo["key_risks"] = detect_risks(evidence)
+    deterministic_memo["missing_evidence"], deterministic_memo["diligence_questions"] = review_evidence_gaps(evidence)
+    deterministic_memo["reviewer_notes"] = reviewer_notes(evidence, processed_documents)
 
-    memo = draft_memo(evidence, memo_plan, company_name, sector)
-    stages.append(_stage("Draft Generator", "completed", "Generated a review-ready diligence memo draft."))
+    charts = build_charts(evidence, deterministic_memo)
+    memo_result = await run_memo_agent_workflow(
+        evidence=evidence,
+        manual_notes=manual_notes,
+        company_name=company_name,
+        sector=sector,
+        charts=charts,
+        deterministic_memo=deterministic_memo,
+    )
 
-    memo["key_risks"] = detect_risks(evidence)
-    stages.append(_stage("Risk Checker", "completed", f"Identified {len(memo['key_risks'])} risk or assumption item(s)."))
+    if memo_result["planner_used"]:
+        stages.append(_stage("Memo Planner", "completed", "AI-assisted planner mapped source-backed evidence into memo sections."))
+    else:
+        stages.append(_stage("Memo Planner", "completed", "Deterministic planner mapped source-backed evidence into memo sections."))
 
-    memo["missing_evidence"], memo["diligence_questions"] = review_evidence_gaps(evidence)
-    stages.append(_stage("Evidence Gap Review", "completed", "Separated unsupported areas into missing evidence and diligence questions."))
+    if memo_result["draft_used"]:
+        stages.append(_stage("Draft Generator", "completed", "LLM memo agent generated the draft using structured evidence, source names, and manual notes."))
+    else:
+        stages.append(_stage("Draft Generator", "completed", "Fallback memo generated from deterministic evidence pipeline."))
 
-    memo["reviewer_notes"] = reviewer_notes(evidence, processed_documents)
+    if memo_result["risk_review_used"]:
+        stages.append(_stage("Risk Checker", "completed", "Hybrid rules + AI review checked risks, assumptions, missing support, and unsupported claims."))
+    else:
+        stages.append(_stage("Risk Checker", "completed", f"Deterministic risk rules identified {len(memo_result['memo']['key_risks'])} risk or assumption item(s)."))
+
+    guardrail_summary = memo_result["guardrail_summary"]
+    stages.append(_stage("Evidence Gap Review", "completed", guardrail_summary))
+
+    memo = memo_result["memo"]
     artifact_markdown = build_markdown_artifact(memo, evidence, company_name, sector)
-    stages.append(_stage("Human Review Artifact", "completed", "Packaged markdown, evidence appendix, and reviewer notes."))
+    stages.append(_stage("Human Review Artifact", "completed", "Deterministic exporter packaged markdown, evidence appendix, reviewer notes, and PDF-ready output."))
 
     return {
         "documents": processed_documents,
         "evidence": evidence,
         "stages": stages,
         "memo": memo,
-        "charts": build_charts(evidence, memo),
+        "charts": charts,
         "artifact_markdown": artifact_markdown,
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "memo_generation": {
+            "mode": memo_result["mode"],
+            "model": memo_result["model"],
+            "fallback_reason": memo_result["fallback_reason"],
+        },
     }
 
 
 def extract_pdf_text(content: bytes) -> tuple[str, str]:
     text, _tables, status = extract_pdf_content(content)
     return text, status
+
+
+async def run_memo_agent_workflow(
+    *,
+    evidence: list[dict],
+    manual_notes: str,
+    company_name: str,
+    sector: str,
+    charts: dict,
+    deterministic_memo: dict,
+) -> dict:
+    fallback = {
+        "memo": deterministic_memo,
+        "mode": "deterministic_fallback",
+        "model": "",
+        "fallback_reason": "",
+        "planner_used": False,
+        "draft_used": False,
+        "risk_review_used": False,
+        "guardrail_summary": "Deterministic fallback used.",
+    }
+    if not os.environ.get("OPENAI_API_KEY"):
+        return {**fallback, "fallback_reason": "OPENAI_API_KEY is not set."}
+
+    try:
+        result = await _run_memo_agents_async(
+            evidence=evidence,
+            manual_notes=manual_notes,
+            company_name=company_name,
+            sector=sector,
+            charts=charts,
+            deterministic_memo=deterministic_memo,
+        )
+    except Exception as error:
+        return {**fallback, "fallback_reason": f"LLM memo agent failed: {error}"}
+
+    validation_errors = _validate_llm_memo(result["memo"], evidence, deterministic_memo)
+    if validation_errors:
+        return {
+            **fallback,
+            "fallback_reason": "Guardrail validation failed: " + "; ".join(validation_errors[:3]),
+            "guardrail_summary": "LLM output failed guardrails; deterministic fallback used.",
+        }
+
+    return {
+        "memo": result["memo"],
+        "mode": "llm_grounded",
+        "model": result["model"],
+        "fallback_reason": "",
+        "planner_used": True,
+        "draft_used": True,
+        "risk_review_used": True,
+        "guardrail_summary": "Deterministic guardrail validation completed. LLM output passed source-grounding and no-recommendation checks.",
+    }
+
+
+async def _run_memo_agents_async(
+    *,
+    evidence: list[dict],
+    manual_notes: str,
+    company_name: str,
+    sector: str,
+    charts: dict,
+    deterministic_memo: dict,
+) -> dict:
+    try:
+        from agents import Agent, Runner
+    except ImportError as error:
+        raise ImportError("openai-agents is not installed") from error
+
+    model = _memo_agent_model()
+    payload = _memo_agent_payload(
+        evidence=evidence,
+        manual_notes=manual_notes,
+        company_name=company_name,
+        sector=sector,
+        charts=charts,
+        deterministic_memo=deterministic_memo,
+    )
+
+    planner = Agent(
+        name="Memo Planner Agent",
+        instructions=(
+            "You are the Memo Planner Agent for BroPilot Workbench. Use only the "
+            "provided structured evidence, source names, chart metrics, detected risks, "
+            "missing evidence, and manual notes. Return compact JSON with key "
+            "'section_plan'. Do not invent facts."
+        ),
+        model=model,
+    )
+    plan_result = await asyncio.wait_for(
+        Runner.run(planner, input=json.dumps(payload, ensure_ascii=False)),
+        timeout=MEMO_AGENT_TIMEOUT_SECONDS,
+    )
+    section_plan = _extract_json_object(_final_agent_output(plan_result))
+
+    draft_agent = Agent(
+        name="Memo Draft Agent",
+        instructions=(
+            "You are the Memo Draft Agent for BroPilot Workbench. Draft a concise, "
+            "professional diligence memo using only the provided structured evidence "
+            "and section plan. Do not make a final investment recommendation. Do not "
+            "invent facts. Major claims should mention source document names when possible. "
+            "Return JSON only with top-level key 'memo' matching the requested schema."
+        ),
+        model=model,
+    )
+    draft_prompt = json.dumps({**payload, "section_plan": section_plan}, ensure_ascii=False)
+    draft_result = await asyncio.wait_for(
+        Runner.run(draft_agent, input=draft_prompt),
+        timeout=MEMO_AGENT_TIMEOUT_SECONDS,
+    )
+    draft_payload = _extract_json_object(_final_agent_output(draft_result))
+    memo = _coerce_memo_shape(draft_payload.get("memo") or draft_payload, deterministic_memo)
+
+    risk_agent = Agent(
+        name="Risk Review Agent",
+        instructions=(
+            "You are the Risk Review Agent for BroPilot Workbench. Review the memo "
+            "against the provided evidence. Improve key risks, missing evidence, "
+            "diligence questions, and reviewer notes while staying source-grounded. "
+            "Do not recommend invest/pass/buy/approve/reject. Return JSON only with "
+            "keys: key_risks, missing_evidence, diligence_questions, reviewer_notes."
+        ),
+        model=model,
+    )
+    risk_prompt = json.dumps({**payload, "draft_memo": memo}, ensure_ascii=False)
+    risk_result = await asyncio.wait_for(
+        Runner.run(risk_agent, input=risk_prompt),
+        timeout=MEMO_AGENT_TIMEOUT_SECONDS,
+    )
+    risk_payload = _extract_json_object(_final_agent_output(risk_result))
+    for key in ("key_risks", "missing_evidence", "diligence_questions", "reviewer_notes"):
+        if isinstance(risk_payload.get(key), list) and risk_payload[key]:
+            memo[key] = [str(item)[:500] for item in risk_payload[key]][:12]
+
+    return {"memo": memo, "model": model}
+
+
+def _memo_agent_model() -> str:
+    return os.environ.get(MEMO_AGENT_MODEL_ENV, MODEL_TERRA).strip() or MODEL_TERRA
+
+
+def _memo_agent_payload(
+    *,
+    evidence: list[dict],
+    manual_notes: str,
+    company_name: str,
+    sector: str,
+    charts: dict,
+    deterministic_memo: dict,
+) -> dict:
+    compact_evidence = [
+        {
+            "fact": item.get("fact", ""),
+            "source_document": item.get("source_document", ""),
+            "category": item.get("category", ""),
+            "support_level": item.get("support_level", ""),
+            "evidence_type": item.get("evidence_type", ""),
+        }
+        for item in evidence[:36]
+    ]
+    return {
+        "company_name": company_name.strip() or "Company",
+        "sector": sector.strip() or "Not provided",
+        "structured_evidence": compact_evidence,
+        "manual_notes": _compact_text(manual_notes, limit=2500),
+        "charts": charts,
+        "detected_risks": deterministic_memo.get("key_risks", []),
+        "missing_evidence": deterministic_memo.get("missing_evidence", []),
+        "draft_schema": {
+            "memo": {
+                "executive_summary": "string",
+                "company_overview": "string",
+                "product_value_proposition": "string",
+                "market_customer_thesis": "string",
+                "traction_financial_signals": "string",
+                "gtm_motion": "string",
+                "competitive_landscape": "string",
+                "key_risks": ["string"],
+                "missing_evidence": ["string"],
+                "diligence_questions": ["string"],
+                "reviewer_notes": ["string"],
+            }
+        },
+        "guardrails": [
+            "Use only uploaded documents, extracted evidence, and manual notes.",
+            "Do not invent facts.",
+            "Do not make a final investment recommendation.",
+            "If competitors or win/loss data are missing, say that instead of inventing competitors.",
+            "Mention source document names for major metrics or claims when possible.",
+        ],
+    }
 
 
 def extract_pdf_content(content: bytes) -> tuple[str, list[dict], str]:
@@ -208,6 +470,93 @@ def _extract_with_pypdf(content: bytes) -> str:
         return "\n".join(page.extract_text() or "" for page in reader.pages)
     except Exception:
         return ""
+
+
+def _final_agent_output(result: object) -> str:
+    value = getattr(result, "final_output", result)
+    return str(value)
+
+
+def _extract_json_object(value: str) -> dict:
+    text = value.strip()
+    try:
+        parsed = json.loads(text)
+        return parsed if isinstance(parsed, dict) else {}
+    except json.JSONDecodeError:
+        pass
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        raise ValueError("Agent did not return JSON.")
+    parsed = json.loads(text[start:end + 1])
+    if not isinstance(parsed, dict):
+        raise ValueError("Agent JSON was not an object.")
+    return parsed
+
+
+def _coerce_memo_shape(candidate: dict, fallback: dict) -> dict:
+    text_keys = [
+        "executive_summary",
+        "company_overview",
+        "product_value_proposition",
+        "market_customer_thesis",
+        "traction_financial_signals",
+        "gtm_motion",
+        "competitive_landscape",
+    ]
+    list_keys = ["key_risks", "missing_evidence", "diligence_questions", "reviewer_notes"]
+    memo = {}
+    for key in text_keys:
+        value = candidate.get(key)
+        memo[key] = _compact_text(value, limit=1800) if value else fallback.get(key, "")
+    for key in list_keys:
+        value = candidate.get(key)
+        if isinstance(value, list) and value:
+            memo[key] = [_compact_text(item, limit=500) for item in value][:12]
+        else:
+            memo[key] = list(fallback.get(key, []))
+    return memo
+
+
+def _validate_llm_memo(memo: dict, evidence: list[dict], fallback: dict) -> list[str]:
+    errors = []
+    joined = " ".join(str(value) for value in memo.values()).lower()
+    if any(term in joined for term in MEMO_GUARDRAIL_BLOCKED_TERMS):
+        errors.append("Final investment recommendation language detected.")
+    for term in (" invest ", " pass ", " buy ", " approve ", " reject "):
+        if term in f" {joined} ":
+            errors.append(f"Blocked decision term detected: {term.strip()}.")
+            break
+
+    required_text = [
+        "executive_summary",
+        "company_overview",
+        "traction_financial_signals",
+        "competitive_landscape",
+    ]
+    for key in required_text:
+        if not str(memo.get(key, "")).strip():
+            errors.append(f"Missing memo section: {key}.")
+
+    if not memo.get("missing_evidence") and fallback.get("missing_evidence"):
+        errors.append("Missing evidence was dropped.")
+
+    source_names = {
+        str(item.get("source_document", "")).strip()
+        for item in evidence
+        if str(item.get("source_document", "")).strip()
+    }
+    financial_section = str(memo.get("traction_financial_signals", ""))
+    if any(token in financial_section.lower() for token in ("arr", "revenue", "margin", "retention")):
+        if source_names and not any(source in financial_section for source in source_names):
+            errors.append("Financial claims lack source document names.")
+    return errors
+
+
+def _compact_text(value: object, limit: int = 1200) -> str:
+    text = _compact_whitespace(str(value or ""))
+    return text[:limit].rstrip()
 
 
 def _extract_pdf_text_fallback(content: bytes) -> str:
@@ -1270,7 +1619,7 @@ def _stage(name: str, status: str, summary: str) -> dict:
 def _text_extraction_summary(documents: list[dict], manual_notes: str) -> str:
     extracted = sum(1 for document in documents if document["extraction_status"] != "no extractable text")
     note = " Manual notes included." if manual_notes.strip() else ""
-    return f"Extracted usable text from {extracted}/{len(documents)} uploaded document(s).{note}"
+    return f"Deterministic PDF parser extracted usable text and tables from {extracted}/{len(documents)} uploaded document(s).{note}"
 
 
 def _sentences(text: str) -> list[str]:

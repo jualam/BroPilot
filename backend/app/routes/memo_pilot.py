@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from app.services.memo_pilot_service import generate_memo_pilot_response
+from app.services.memo_pilot_service import generate_memo_pilot_response_async
 
 
 router = APIRouter(prefix="/api/memo-pilot", tags=["memo-pilot"])
@@ -53,7 +53,7 @@ async def generate_memo(
             detail="Upload at least one text-based PDF or add manual notes.",
         )
 
-    return generate_memo_pilot_response(
+    return await generate_memo_pilot_response_async(
         documents=prepared_documents,
         manual_notes=manual_notes,
         company_name=company_name,
