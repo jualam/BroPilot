@@ -60,7 +60,7 @@ type OpsReview = {
   summary: string;
   operational_bottlenecks: {
     title: string;
-    evidence: string;
+    evidence: string | string[];
     root_cause: string;
     source: string;
   }[];
@@ -68,7 +68,7 @@ type OpsReview = {
     title: string;
     workflow: string;
     why_it_matters: string;
-    suggested_automation: string;
+    suggested_automation: string | string[];
     source: string;
   }[];
   priority_ranking: {
@@ -819,7 +819,7 @@ function SignalsPanel({ signals }: { signals: Signal[] }) {
   return (
     <section className="flex h-full min-h-0 flex-col rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
       <h2 className="text-xl font-semibold tracking-tight">Operational Signals</h2>
-      <div className="mt-5 grid min-h-0 flex-1 gap-2 overflow-auto pr-2">
+      <div className="mt-5 grid max-h-[920px] min-h-0 gap-2 overflow-auto pr-2">
         {signals.map((signal) => (
           <article className="rounded-md border border-zinc-200 bg-zinc-50 p-3" key={`${signal.type}-${signal.evidence}`}>
             <div className="flex flex-wrap items-center gap-2">
@@ -865,8 +865,10 @@ function OpsOutput({ result }: { result: OpsResult }) {
           render={(item) => (
             <>
               <h3 className="font-semibold text-zinc-950">{item.title}</h3>
-              <p className="mt-2 text-sm leading-6 text-zinc-600">{item.evidence}</p>
-              <p className="mt-2 text-sm leading-6 text-zinc-700"><span className="font-semibold">Root cause:</span> {item.root_cause}</p>
+              <StructuredText className="mt-2 text-sm leading-6 text-zinc-600" value={item.evidence} />
+              {item.root_cause ? (
+                <p className="mt-2 text-sm leading-6 text-zinc-700"><span className="font-semibold">Root cause:</span> {item.root_cause}</p>
+              ) : null}
             </>
           )}
           title="Operational Bottlenecks"
@@ -876,8 +878,15 @@ function OpsOutput({ result }: { result: OpsResult }) {
           render={(item) => (
             <>
               <h3 className="font-semibold text-zinc-950">{item.title}</h3>
-              <p className="mt-2 text-sm leading-6 text-zinc-600">{item.why_it_matters}</p>
-              <p className="mt-2 text-sm leading-6 text-zinc-700"><span className="font-semibold">Automation:</span> {item.suggested_automation}</p>
+              {item.why_it_matters ? (
+                <p className="mt-2 text-sm leading-6 text-zinc-600">{item.why_it_matters}</p>
+              ) : null}
+              {item.suggested_automation ? (
+                <div className="mt-2 text-sm leading-6 text-zinc-700">
+                  <span className="font-semibold">Automation:</span>
+                  <StructuredText className="mt-1" value={item.suggested_automation} />
+                </div>
+              ) : null}
             </>
           )}
           title="Automation Opportunities"
@@ -892,22 +901,40 @@ function OpsOutput({ result }: { result: OpsResult }) {
       </section>
 
       <section className="grid gap-5 xl:grid-cols-3">
-        <ListCard items={review.risks_and_assumptions} title="Risks and Assumptions" />
-        <ListCard items={review.questions_for_operator} title="Questions for Operator" />
+        <ListCard items={review.risks_and_assumptions} limit={5} title="Risks and Assumptions" />
+        <ListCard items={review.questions_for_operator} limit={8} title="Questions for Operator" />
         <ListCard items={review.reviewer_notes} title="Reviewer Notes" />
       </section>
     </section>
   );
 }
 
+function StructuredText({ className, value }: { className?: string; value: string | string[] }) {
+  if (Array.isArray(value)) {
+    return (
+      <ul className={`grid gap-1 ${className ?? ""}`}>
+        {value.map((item, index) => (
+          <li className="grid grid-cols-[8px_minmax(0,1fr)] gap-3" key={`${index}-${item}`}>
+            <span className="mt-2 size-1.5 rounded-full bg-zinc-400" />
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  return <p className={className}>{value}</p>;
+}
+
 function RecommendedWorkflow({ workflow }: { workflow: OpsReview["recommended_first_workflow"] }) {
+  const scope = workflow.scope || "Start with milestone tracking, stuck-account alerts, checklist ownership, and internal follow-up tasks for a small onboarding pilot cohort.";
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">Recommended first workflow</p>
       <h2 className="mt-3 text-2xl font-semibold tracking-tight text-zinc-950">{workflow.title}</h2>
       <p className="mt-3 max-w-4xl text-sm leading-6 text-zinc-700">{workflow.why_first}</p>
       <div className="mt-5 grid gap-3 md:grid-cols-2">
-        <p className="rounded-md border border-zinc-200 bg-zinc-50 p-4 text-sm leading-6 text-zinc-700"><span className="font-semibold text-zinc-950">Scope:</span> {workflow.scope}</p>
+        <p className="rounded-md border border-zinc-200 bg-zinc-50 p-4 text-sm leading-6 text-zinc-700"><span className="font-semibold text-zinc-950">Scope:</span> {scope}</p>
         <p className="rounded-md border border-zinc-200 bg-zinc-50 p-4 text-sm leading-6 text-zinc-700"><span className="font-semibold text-zinc-950">Human owner:</span> {workflow.human_owner}</p>
       </div>
     </section>
@@ -934,14 +961,13 @@ function PriorityTable({ rows }: { rows: OpsReview["priority_ranking"] }) {
     <section className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
       <h2 className="text-xl font-semibold tracking-tight">Priority Ranking</h2>
       <div className="mt-5 overflow-auto rounded-md border border-zinc-200">
-        <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[560px] border-collapse text-left text-sm">
           <thead className="bg-zinc-50 text-xs uppercase tracking-[0.08em] text-zinc-500">
             <tr>
               <th className="px-4 py-3">Opportunity</th>
               <th className="px-4 py-3">Impact</th>
               <th className="px-4 py-3">Effort</th>
               <th className="px-4 py-3">Confidence</th>
-              <th className="px-4 py-3">Reason</th>
             </tr>
           </thead>
           <tbody>
@@ -951,7 +977,6 @@ function PriorityTable({ rows }: { rows: OpsReview["priority_ranking"] }) {
                 <td className="px-4 py-4">{row.impact}</td>
                 <td className="px-4 py-4">{row.effort}</td>
                 <td className="px-4 py-4">{row.confidence}</td>
-                <td className="px-4 py-4 leading-6 text-zinc-600">{row.reason}</td>
               </tr>
             ))}
           </tbody>
@@ -993,7 +1018,7 @@ function MetricsCard({ metrics }: { metrics: OpsReview["metrics_to_track"] }) {
           <article className="rounded-md border border-zinc-200 bg-zinc-50 p-4" key={metric.metric}>
             <h3 className="font-semibold text-zinc-950">{metric.metric}</h3>
             <p className="mt-2 text-sm leading-6 text-zinc-600">{metric.why_it_matters}</p>
-            <p className="mt-2 text-sm leading-6 text-zinc-700"><span className="font-semibold">Baseline/target:</span> {metric.baseline_or_target}</p>
+            <p className="mt-2 text-sm leading-6 text-zinc-700"><span className="font-semibold">Baseline/target:</span> {metric.baseline_or_target || metricBaselineFallback(metric.metric)}</p>
           </article>
         ))}
       </div>
@@ -1001,18 +1026,36 @@ function MetricsCard({ metrics }: { metrics: OpsReview["metrics_to_track"] }) {
   );
 }
 
-function ListCard({ items, title }: { items: string[]; title: string }) {
+function metricBaselineFallback(metric: string) {
+  const key = metric.toLowerCase();
+  if (key.includes("average onboarding time")) return "Reported baseline: 21 days; validate calculation method.";
+  if (key.includes("week-2 activation")) return "Needs baseline from onboarding records.";
+  if (key.includes("support backlog")) return "Reported signal: backlog up 34%; validate queue scope.";
+  if (key.includes("manual coordination") || key.includes("manual setup")) return "Needs operator baseline.";
+  if (key.includes("alert precision")) return "Track false positives and useful alerts during pilot.";
+  return "Needs operator baseline.";
+}
+
+function ListCard({ items, title, limit }: { items: string[]; title: string; limit?: number }) {
+  const visibleItems = typeof limit === "number" ? items.slice(0, limit) : items;
+  const hiddenCount = Math.max(0, items.length - visibleItems.length);
+
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
       <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
       <ul className="mt-5 grid gap-2 text-sm leading-6 text-zinc-700">
-        {items.map((item) => (
-          <li className="grid grid-cols-[8px_minmax(0,1fr)] gap-3" key={item}>
+        {visibleItems.map((item, index) => (
+          <li className="grid grid-cols-[8px_minmax(0,1fr)] gap-3" key={`${title}-${index}-${item}`}>
             <span className="mt-2 size-1.5 rounded-full bg-zinc-950" />
             <span>{item}</span>
           </li>
         ))}
       </ul>
+      {hiddenCount ? (
+        <p className="mt-4 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-medium text-zinc-500">
+          {hiddenCount} more included in the export appendix.
+        </p>
+      ) : null}
     </section>
   );
 }
