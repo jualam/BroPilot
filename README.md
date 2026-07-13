@@ -2,130 +2,165 @@
 
 Review-ready AI workflows for high-trust automation.
 
-BroPilot Workbench is a local-first prototype for turning ambiguous work into structured, verified, human-reviewable outputs. Code Pilot is the deepest workflow today: give it a local repository path and an engineering task, and it prepares a reviewable code change while the backend independently captures tests, diffs, safety signals, repo memory, and PR-ready notes.
+BroPilot Workbench is a local-first prototype for turning ambiguous work into structured, verified, human-reviewable outputs. It demonstrates one reusable workflow pattern across code changes, diligence memo drafting, and operations improvement planning:
 
-BroPilot does not auto-merge, auto-push, or bypass human review.
+```text
+Context Intake -> Scoped Plan -> Constrained Agent -> Independent Verification -> Flight Recorder -> Human Review
+```
+
+The system is intentionally conservative. It does not auto-merge, auto-push, make investment decisions, or take final operating action. Each workflow prepares an artifact for a human reviewer.
 
 ## Workflows
 
-- **Code Pilot**: safe agentic code changes with scoped context, constrained OpenAI Agents SDK execution, independent tests, diffs, safety checks, and a PR summary.
-- **Memo Pilot**: architecture demo placeholder for turning company notes into review-ready memo drafts.
-- **Ops Pilot**: architecture demo placeholder for turning operating notes into prioritized action plans.
+### Code Pilot
 
-## What Code Pilot Does
+Code Pilot turns an engineering task into a review-ready code change.
 
-BroPilot turns this:
+It works against a local target repo, runs constrained OpenAI Agents SDK execution, captures changed files and diffs, runs independent tests, records safety signals, updates repo memory, and produces PR-ready review notes.
+
+The demo target repo is separate from this app:
 
 ```text
-Repo path: D:\bropilot-demo
-Task: Add a /status endpoint that returns {"status": "ready"} and add tests
+https://github.com/jualam/broPilot-demo
 ```
 
-Into a local review workflow:
+The local demo repo is expected at:
 
-- Analyzer records the starting git state.
-- Planner builds a constrained task prompt with repo memory and preloaded file context.
-- Coder runs through the OpenAI Agents SDK with scoped read/write tools.
-- Tester runs `python -m pytest` from the backend.
-- Reviewer captures changed files, diff stats, safety signals, and a copy-ready PR summary.
+```text
+D:\bropilot-demo
+```
 
-The dashboard presents the run as an Agent Flight Recorder instead of a black-box response.
+The reset script restores the demo repo to baseline commit `d672866` and creates a fresh local `demo-working` branch:
+
+```powershell
+cd D:\BroPilot
+powershell -ExecutionPolicy Bypass -File .\scripts\reset-demo.ps1
+```
+
+### Memo Pilot
+
+Memo Pilot turns company PDFs and manual notes into a review-ready diligence memo draft.
+
+It supports multiple text-based PDFs, table-aware PDF extraction, manual notes, evidence cards, evidence coverage, risk review, missing-evidence checks, diligence questions, copy-ready markdown, and PDF-ready export.
+
+Memo Pilot is designed as a human-review workflow. It separates facts, assumptions, risks, missing evidence, and reviewer notes instead of making an investment decision.
+
+### Ops Pilot
+
+Ops Pilot turns operating notes, PDFs, and screenshots into a review-ready operations improvement plan.
+
+It combines deterministic OCR/PDF parsing and signal extraction with typed AI agents for bottleneck analysis, automation planning, prioritization, and risk review. Outputs include operational signals, bottlenecks, automation opportunities, priority ranking, a recommended first workflow, a 30-day plan, metrics, risks, questions, and export-ready artifacts.
+
+Ops Pilot is designed to identify candidate workflows for human review, not to guarantee ROI or automatically implement changes.
 
 ## Architecture
 
 ```text
-User
+Next.js Frontend
   |
   v
-Next.js Dashboard (frontend/)
+FastAPI Backend
   |
-  | POST /api/runs/start
-  v
-FastAPI Orchestrator (backend/)
+  |-- Code Pilot
+  |   |-- repo context loading
+  |   |-- scoped OpenAI Agents SDK code execution
+  |   |-- pytest verification
+  |   |-- git diff and checkpoint capture
+  |   `-- PR summary and safety review
   |
-  | load repo memory
-  | preload known files
-  | run constrained Code Pilot agent
-  v
-OpenAI Agents SDK (read_file/write_file tools only)
+  |-- Memo Pilot
+  |   |-- PDF text/table extraction
+  |   |-- evidence construction
+  |   |-- AI-assisted memo planning and drafting
+  |   |-- risk and missing-evidence review
+  |   `-- markdown/PDF-ready export
   |
-  v
-Target Repo (example: D:\bropilot-demo)
-  |
-  | run python -m pytest
-  | capture git status/diff
-  | update repo memory
-  v
-Agent Flight Recorder Response
-  |
-  v
-Next.js Dashboard
+  `-- Ops Pilot
+      |-- image OCR and PDF extraction
+      |-- deterministic signal extraction
+      |-- typed AI agents for analysis and planning
+      |-- guardrail validation
+      `-- markdown/PDF-ready export
 ```
 
-Review Assistant uses a separate backend endpoint:
+## Flight Recorder Pattern
+
+Each workflow exposes its process through a Flight Recorder rather than a black-box answer.
+
+Code Pilot stages:
 
 ```text
-Diff modal -> POST /api/review/file-diff -> OpenAI API
+Analyzer -> Planner -> Coder -> Tester -> Reviewer
 ```
 
-It summarizes only the currently opened file diff and does not run Code Pilot.
+Memo Pilot stages:
+
+```text
+Document Intake -> Text Extraction -> Evidence Extraction -> Memo Planner -> Draft Generator -> Risk Checker -> Evidence Gap Review -> Human Review Artifact
+```
+
+Ops Pilot stages:
+
+```text
+Ops Intake -> OCR / Text Extraction -> Signal Extraction -> Bottleneck Analyst Agent -> Automation Planner Agent -> Prioritization Agent -> Risk & Guardrail Review -> Human Review Artifact
+```
+
+## Safety Model
+
+BroPilot Workbench is built around review-first automation:
+
+- no automatic merge
+- no automatic push
+- no automatic production action
+- protected paths for secrets, virtual environments, generated artifacts, and git metadata
+- constrained Code Pilot file tools
+- independent backend verification after Code Pilot edits
+- typed structured outputs for Ops Pilot agents
+- source-backed evidence and missing-evidence review for Memo Pilot
+- local checkpoints for Code Pilot recovery
+- human review required before merge, investment use, or operating action
 
 ## Project Structure
 
 ```text
 BroPilot/
-|-- frontend/                         # Next.js dashboard and workflow pages
-|-- backend/                          # FastAPI orchestrator
+|-- backend/
 |   |-- app/
-|   |   |-- routes/                   # Run and review APIs
-|   |   |-- schemas/                  # Request/response schemas
-|   |   `-- services/                 # OpenAI agent, git, pytest, memory, recorder services
-|   `-- data/                         # Ignored local run and memory artifacts
+|   |   |-- routes/              # FastAPI route modules
+|   |   |-- schemas/             # API schemas
+|   |   `-- services/            # workflow orchestration and agent services
+|   `-- data/                    # local run, memory, and checkpoint data
+|-- frontend/
+|   |-- public/                  # logo and static assets
+|   `-- src/app/                 # Next.js routes
 |-- scripts/
-|   `-- reset-demo.ps1                # Reset local demo repo
-`-- DEMO.md                           # Reproducible demo guide
+|   `-- reset-demo.ps1           # reset local broPilot-demo repo
+|-- DEMO.md                      # Code Pilot demo guide
+|-- SETUP.md                     # local setup instructions
+`-- README.md
 ```
 
 ## Local Setup
 
-### Backend
+See [SETUP.md](SETUP.md).
+
+Short version:
 
 ```powershell
-cd backend
+cd D:\BroPilot\backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-```
-
-Put your OpenAI API key in `backend/.env`:
-
-```text
-OPENAI_API_KEY=sk-...
-```
-
-Optional model overrides:
-
-```text
-BROPILOT_OPENAI_AGENT_MODEL=gpt-5.6-terra
-BROPILOT_REVIEW_MODEL=gpt-4o-mini
-```
-
-Start the backend:
-
-```powershell
-cd backend
 uvicorn app.main:app --reload --port 8000
 ```
 
-### Frontend
-
 ```powershell
-cd frontend
+cd D:\BroPilot\frontend
 npm install
 npm run dev
 ```
 
-The dashboard runs at:
+Open:
 
 ```text
 http://localhost:3000
@@ -133,42 +168,22 @@ http://localhost:3000
 
 ## Routes
 
-- `/` - BroPilot Workbench landing page
-- `/code-pilot` - working Code Pilot demo
-- `/memo-pilot` - workflow demo placeholder
-- `/ops-pilot` - workflow demo placeholder
-- `/architecture` - shared workflow pattern page
+- `/` - BroPilot Workbench home
+- `/code-pilot` - Code Pilot
+- `/memo-pilot` - Memo Pilot
+- `/ops-pilot` - Ops Pilot
+- `/architecture` - Workflow Pattern
 
-## Safety Design
+## Documentation
 
-BroPilot is intentionally conservative.
+- [SETUP.md](SETUP.md) - local installation and OCR setup
+- [DEMO.md](DEMO.md) - reproducible Code Pilot demo flow
 
-- No automatic merge.
-- No direct push.
-- No automatic commit.
-- No `.env`, `.venv`, `.git`, `node_modules`, or generated artifact edits.
-- Code Pilot uses scoped read/write tools instead of shell execution.
-- Backend independently runs verification after the agent run.
-- Human review is required before merge.
+## Current Limitations
 
-If a task says to update only specific files, BroPilot compares that boundary against the final changed files. Unexpected edits are surfaced in the Safety Panel and copied into the PR summary notes.
+- The system is a local prototype, not a hosted multi-user product.
+- Code Pilot is optimized for the small FastAPI demo repo and Python test workflows.
+- Memo Pilot works best with text-based PDFs; scanned PDFs may need separate OCR.
+- Ops Pilot image OCR requires local Tesseract setup.
+- Human review is required before using any generated artifact.
 
-## Repo Memory
-
-BroPilot stores bounded repo-specific memory under `backend/data/memory/` as local ignored data.
-
-The memory file stores:
-
-- up to 12 lessons
-- up to 10 recent run records
-
-Lessons include stable repo facts such as the test command, test location, app entrypoint, changed files, and latest verification result. Lessons are loaded into future Code Pilot prompts so the workflow can adapt to the repo across runs.
-
-## Known Limitations
-
-- Code Pilot currently focuses on Python demo repos using `python -m pytest`.
-- Memo Pilot and Ops Pilot are architecture demo placeholders.
-- Review Assistant summarizes one opened file diff at a time.
-- No GitHub draft PR creation yet.
-- No automatic branch/session management yet.
-- Human review is still required before merge.
