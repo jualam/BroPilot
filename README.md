@@ -87,23 +87,61 @@ FastAPI Backend
 
 Each workflow exposes its process through a Flight Recorder rather than a black-box answer.
 
-Code Pilot stages:
+### Code Pilot
 
-```text
-Analyzer -> Planner -> Coder -> Tester -> Reviewer
-```
+| Stage | Type | Purpose |
+| --- | --- | --- |
+| Analyzer | Deterministic | Captures starting git status and repo state before the agent runs. |
+| Planner | Deterministic + model routing | Builds a scoped plan, selects a model, loads repo memory, and prepares guardrails. |
+| Coder | AI agent | Uses the OpenAI Agents SDK with scoped file tools to make the code change. |
+| Tester | Deterministic | Runs backend-owned verification such as `python -m pytest`. |
+| Reviewer | Deterministic + AI summary | Captures diff stats, safety signals, changed files, and review-ready notes. |
 
-Memo Pilot stages:
+### Memo Pilot
 
-```text
-Document Intake -> Text Extraction -> Evidence Extraction -> Memo Planner -> Draft Generator -> Risk Checker -> Evidence Gap Review -> Human Review Artifact
-```
+| Stage | Type | Purpose |
+| --- | --- | --- |
+| Document Intake | Deterministic | Receives PDFs, company metadata, and manual notes. |
+| Text Extraction | Deterministic | Extracts PDF text and tables with structured source names. |
+| Evidence Extraction | Deterministic | Builds source-backed evidence items from extracted text and tables. |
+| Memo Planner | AI agent | Maps evidence into memo sections and review structure. |
+| Draft Generator | AI agent | Generates the memo draft from structured evidence and notes. |
+| Risk Checker | Hybrid | Reviews risks and assumptions with AI, then normalizes the result. |
+| Evidence Gap Review | Deterministic guardrail | Checks source grounding, missing evidence, and no-decision framing. |
+| Human Review Artifact | Deterministic | Packages markdown, PDF-ready output, reviewer notes, and evidence appendix. |
 
-Ops Pilot stages:
+### Ops Pilot
 
-```text
-Ops Intake -> OCR / Text Extraction -> Signal Extraction -> Bottleneck Analyst Agent -> Automation Planner Agent -> Prioritization Agent -> Risk & Guardrail Review -> Human Review Artifact
-```
+| Stage | Type | Purpose |
+| --- | --- | --- |
+| Ops Intake | Deterministic | Receives image, PDFs, workflow area, company name, and manual notes. |
+| OCR / Text Extraction | Deterministic | Extracts image text with local OCR and PDF text/tables with PDF parsing. |
+| Signal Extraction | Deterministic | Converts operating inputs into structured operational signals. |
+| Bottleneck Analyst Agent | AI agent | Identifies bottlenecks, evidence, and root causes using typed output. |
+| Automation Planner Agent | AI agent | Proposes automation opportunities and concrete workflow steps. |
+| Prioritization Agent | AI agent | Ranks opportunities and builds the recommended first workflow, metrics, and plan. |
+| Risk & Guardrail Review | Hybrid | Produces risks/questions/reviewer notes and validates blocked claims. |
+| Human Review Artifact | Deterministic | Packages the operations review, markdown, and PDF-ready export. |
+
+## Guardrails and Fallbacks
+
+Guardrails:
+
+- Code Pilot blocks protected paths such as `.env`, `.venv`, `.git`, `node_modules`, generated workspaces, and agent metadata.
+- Code Pilot uses scoped read/write tools instead of giving the coding agent unrestricted shell access.
+- Code Pilot verification is run independently by the backend after agent edits.
+- Memo Pilot keeps evidence, assumptions, missing evidence, and reviewer notes separate.
+- Ops Pilot agents use typed structured outputs so malformed responses do not pass silently downstream.
+- Memo Pilot and Ops Pilot avoid final-decision framing, guaranteed ROI, and unsupported claims.
+- All workflows end in human review rather than automatic merge, investment decision, or operating action.
+
+Fallbacks:
+
+- Code Pilot captures failed tests, changed files, and diffs even when a run is not ready to merge.
+- Code Pilot local checkpoints allow reverting a run back to the pre-run target repo state.
+- Memo Pilot and Ops Pilot fall back to deterministic output if an API key is missing, an agent call fails, structured output is invalid, or guardrail validation fails.
+- Memo Pilot and Ops Pilot normalize missing fields so exports do not show blank critical sections.
+- Ops Pilot can still use manual notes and PDFs if image OCR is unavailable.
 
 ## Safety Model
 
@@ -186,4 +224,3 @@ http://localhost:3000
 - Memo Pilot works best with text-based PDFs; scanned PDFs may need separate OCR.
 - Ops Pilot image OCR requires local Tesseract setup.
 - Human review is required before using any generated artifact.
-
