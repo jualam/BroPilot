@@ -1,0 +1,44 @@
+For Demo:
+python -m uvicorn app.main:app --reload --port 8000
+powershell -ExecutionPolicy Bypass -File .\scripts\reset-demo.ps1 
+
+Tasks for Code pilot to test: 
+
+Add a /status endpoint that returns {"status": "ready"} and add tests. Update only main.py and tests/test_main.py. Do not modify skills/. Make python -m pytest pass.
+
+Add a /health endpoint that returns {"ok": true, "status": "ready"} and add tests. Use the same FastAPI style as the existing /status endpoint. Update only main.py and tests/test_main.py. Do not modify skills/. Make python -m pytest pass.
+
+Add a /version endpoint that returns {"version": "0.1.0"} and add tests. Update only main.py and tests/test_main.py. Do not modify skills/. Make python -m pytest pass.
+
+Fix profile lookup so GET /profile/mallory returns 404 with {"detail": "User not found"}. Update only auth.py, main.py, and tests/test_main.py. Do not modify skills/. Make python -m pytest pass.
+
+Refactor the auth/profile lookup so GET /profile/mallory returns 404 with {"detail": "User not found"} instead of a fake profile. Keep GET /profile/alice working exactly as before. Update only auth.py, main.py, and tests/test_main.py. Do not modify skills/.
+
+Refactor the auth/profile lookup behavior so unknown users return a 404 error instead of a fake profile. GET /profile/mallory should return {"detail": "User not found"} with status 404. Keep GET /profile/alice working exactly as before. Update only auth.py, main.py, and tests/test_main.py. Do not modify skills/.
+
+
+Additional text for Memopilot:
+
+Additional notes from partner call:
+- Management says the near-term priority is standardizing implementation and reducing custom EHR setup work.
+- The company is exploring partner-led onboarding for smaller clinics.
+- Sales team is strongest in mid-market clinics; regional health groups are attractive but slower to close.
+- Management wants to expand from scheduling and authorization workflows into revenue cycle follow-up and patient engagement tasks.
+- Open diligence items mentioned during the call: CAC payback by segment, cohort retention, implementation margin, detailed churn reasons, audited financials, and competitive win/loss data.
+
+
+Additional text for OpsPilot:
+
+Company: Northstar Clinics
+Workflow area: Customer onboarding and support operations
+
+- Customer success does not have one reliable view of which accounts are stuck in onboarding.
+- Setup tasks are tracked across Salesforce, Zendesk, Google Sheets, Slack, and email.
+- Security questionnaire answers are copied from older documents manually.
+- Implementation managers repeat the same onboarding explanations for new customers.
+- Customers often become inactive if they do not complete activation by week 2.
+- Leadership wants one automation pilot that can be tested within 30 days before changing the full onboarding process.
+- The safest first pilot is probably activation risk alerts plus onboarding checklist automation.
+- The team should avoid claiming guaranteed savings until baseline time, ticket volume, activation rate, and CS hours are measured.
+
+
