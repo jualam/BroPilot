@@ -110,12 +110,26 @@ pytesseract
 
 ## 5. Code Pilot Demo Repo
 
-Reset the local demo repo:
+Code Pilot edits a separate demo repo:
+
+```text
+https://github.com/jualam/broPilot-demo
+```
+
+Clone it to:
+
+```powershell
+git clone https://github.com/jualam/broPilot-demo.git D:\bropilot-demo
+```
+
+Reset the local demo repo before a demo run:
 
 ```powershell
 cd D:\BroPilot
 powershell -ExecutionPolicy Bypass -File .\scripts\reset-demo.ps1
 ```
+
+The reset script resets `D:\bropilot-demo` to baseline commit `d672866` and creates a fresh local branch named `demo-working`.
 
 Use this repo path in Code Pilot:
 
@@ -138,4 +152,3 @@ Backend syntax check:
 cd D:\BroPilot\backend
 .\.venv\Scripts\python.exe -m py_compile app\main.py
 ```
-
