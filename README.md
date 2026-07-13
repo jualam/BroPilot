@@ -92,10 +92,10 @@ Each workflow exposes its process through a Flight Recorder rather than a black-
 | Stage | Type | Purpose |
 | --- | --- | --- |
 | Analyzer | Deterministic | Captures starting git status and repo state before the agent runs. |
-| Planner | AI-assisted + deterministic guardrails | Builds a scoped plan, uses repo memory, selects a task-fit model, and prepares guardrails. |
+| Planner | AI agent + deterministic guardrails | Builds a scoped plan, uses repo memory, selects a task-fit model, and prepares guardrails. |
 | Coder | AI agent | Uses the OpenAI Agents SDK with scoped file tools to make the code change. |
 | Tester | Deterministic | Runs backend-owned verification such as `python -m pytest`. |
-| Reviewer | Deterministic + AI summary | Captures diff stats, safety signals, changed files, and review-ready notes. |
+| Reviewer | Deterministic + AI agent | Captures diff stats, safety signals, changed files, and review-ready notes. |
 
 ### Memo Pilot
 
@@ -107,7 +107,7 @@ Each workflow exposes its process through a Flight Recorder rather than a black-
 | Memo Planner | AI agent | Maps evidence into memo sections and review structure. |
 | Draft Generator | AI agent | Generates the memo draft from structured evidence and notes. |
 | Risk Checker | Hybrid | Reviews risks and assumptions with AI, then normalizes the result. |
-| Evidence Gap Review | Deterministic guardrail | Checks source grounding, missing evidence, and no-decision framing. |
+| Evidence Gap Review | Hybrid | Checks source grounding, missing evidence, and no-decision framing. |
 | Human Review Artifact | Deterministic | Packages markdown, PDF-ready output, reviewer notes, and evidence appendix. |
 
 ### Ops Pilot
