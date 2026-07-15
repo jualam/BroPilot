@@ -360,6 +360,7 @@ export default function Home() {
 
       const data = (await response.json()) as RunResponse;
       setRun(data);
+      await refreshRepoStatus(repoPath);
     } catch (caughtError) {
       const message =
         caughtError instanceof Error
@@ -393,6 +394,47 @@ export default function Home() {
     setDiffFile(null);
   }
 
+  async function refreshRepoStatus(path: string, signal?: AbortSignal) {
+    const trimmedPath = path.trim();
+
+    if (!trimmedPath) {
+      setRepoStatus(null);
+      return;
+    }
+
+    setIsCheckingRepo(true);
+
+    try {
+      const response = await fetch(
+        `${REPO_STATUS_API_URL}?repo_path=${encodeURIComponent(trimmedPath)}`,
+        { signal },
+      );
+
+      if (!response.ok) {
+        throw new Error(`Backend returned ${response.status}`);
+      }
+
+      const data = (await response.json()) as RepoStatus;
+      setRepoStatus(data);
+    } catch (caughtError) {
+      if (caughtError instanceof DOMException && caughtError.name === "AbortError") {
+        return;
+      }
+
+      setRepoStatus({
+        status: "error",
+        label: "Repo status unavailable",
+        changed_count: 0,
+        changed_files: [],
+        message: "Start the backend to check whether the repo is clean.",
+      });
+    } finally {
+      if (!signal || !signal.aborted) {
+        setIsCheckingRepo(false);
+      }
+    }
+  }
+
   useEffect(() => {
     const trimmedPath = repoPath.trim();
 
@@ -402,38 +444,8 @@ export default function Home() {
     }
 
     const controller = new AbortController();
-    const timeout = window.setTimeout(async () => {
-      setIsCheckingRepo(true);
-
-      try {
-        const response = await fetch(
-          `${REPO_STATUS_API_URL}?repo_path=${encodeURIComponent(trimmedPath)}`,
-          { signal: controller.signal },
-        );
-
-        if (!response.ok) {
-          throw new Error(`Backend returned ${response.status}`);
-        }
-
-        const data = (await response.json()) as RepoStatus;
-        setRepoStatus(data);
-      } catch (caughtError) {
-        if (caughtError instanceof DOMException && caughtError.name === "AbortError") {
-          return;
-        }
-
-        setRepoStatus({
-          status: "error",
-          label: "Repo status unavailable",
-          changed_count: 0,
-          changed_files: [],
-          message: "Start the backend to check whether the repo is clean.",
-        });
-      } finally {
-        if (!controller.signal.aborted) {
-          setIsCheckingRepo(false);
-        }
-      }
+    const timeout = window.setTimeout(() => {
+      refreshRepoStatus(repoPath, controller.signal);
     }, 350);
 
     return () => {
@@ -485,6 +497,7 @@ export default function Home() {
       const data = (await response.json()) as RevertResult;
       setRevertResult(data);
       setShowRevertDialog(false);
+      await refreshRepoStatus(repoPath);
     } catch (caughtError) {
       const message =
         caughtError instanceof Error
